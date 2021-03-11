@@ -1,0 +1,11 @@
+{
+    "files.associations": {
+        "doVariationGaussianFit.C": "cpp"
+    },
+    "C_Cpp.default.includePath": [
+        "/d/home/septian/anaconda3/envs/TAGM_TW/include"
+    ],
+    "C_Cpp.default.intelliSenseMode": "gcc-x64",
+    "C_Cpp.intelliSenseEngine": "Tag Parser",
+    "python.pythonPath": "/d/home/septian/anaconda3/envs/TAGM_TW/bin/python"
+}
