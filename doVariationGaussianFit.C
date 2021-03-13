@@ -7,6 +7,10 @@ struct fitResults
     float mean;
 };
 
+enum model{
+    singleGaussian,doubleGaussian,tripleGaussian
+};
+
 TH1* GetHistogram(TFile *f, int col, int ph_bin);
 fitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int ph_bin,
                                     double deltaMean,
@@ -16,9 +20,9 @@ fitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int ph_bin,
                                     double c2);
 
 //some parameters to configure
-const Int_t col=44;//first column to fit
+const Int_t col=40;//first column to fit
 const Int_t ncol=1;//number of column to fit
-const Int_t ph_binlow[ncol]= {11
+const Int_t ph_binlow[ncol]= {28
                         // 20,23,24,20,23,//1-5
                         // 15,19,20,25,26,//6-10
                         // 24,25,24,22,25,//11-15
@@ -40,13 +44,12 @@ const Int_t ph_binlow[ncol]= {11
                         // 17,17,15,18,14,//91-95
                         // 15,12,17,14,16
                         };//96-100
-const Int_t n = 30;
+const Int_t n = 1;
 Int_t ph_binup[ncol];
 const Float_t dph_bin=16;
 const Int_t dt_low=-3;
 const Int_t dt_up=10;
 
-bool doVariation = false;
 const int nVar = 10;
 double deltaMeanVar[4] = {0,1,2,3};
 double mean1Var[nVar];
@@ -54,15 +57,16 @@ double sig1Var[nVar];
 double sig2Var[nVar];
 double c2Var[nVar];
 
-
-double mean1Min = 0.;
-double mean1Max = 2.;
-double sig1min = 0.;
+double mean1Min = 0.5;
+double mean1Max = 2.5;
+double sig1min = 0.3;
 double sig1max = 2.;
 double sig2min = 0.;
 double sig2max = 5.;
 double c2min = 0.;
-double c2max = 0.5;
+double c2max = 0.1;
+bool useMinos = kTRUE;
+model fitModel = singleGaussian;
 
 int doVariationGaussianFit(TString rootFile="root/hd_root-r72369.root") {
     
@@ -146,27 +150,75 @@ fitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int ph_bin,
     
     RooRealVar x("TDC time difference","TDC time difference [ns]",dt_low,dt_up);
     RooDataHist data("data","data",RooArgList(x),h);
-    // model: double gaussian
     
+
     RooRealVar mean1("mean1","mean1",mean1val,dt_low,dt_up);
-    RooRealVar mean2("mean2","mean2",mean1val-deltaMean,dt_low,dt_up);
     RooRealVar sigma1("sigma1","sigma1",sig1,sig1min,sig1max);
-    RooGaussian gauss1("gauss1","gauss1",x,mean1,sigma1);
-    RooRealVar sigma2("sigma2","sigma2",sig2,sig2min,sig2max);
-    RooGaussian gauss2("gauss2","gauss2",x,mean2,sigma2);
-    // f1: fraction of entries in first gaussian
-    RooRealVar f1("f1","f1",0.9,0.1,1.0);
-    RooRealVar f2("f2","f2",0.1,0.01,c2);
-    RooAddPdf doubleGauss("doubleGauss","doubleGauss",RooArgList(gauss1,gauss2),RooArgList(f1,f2));
     
-    doubleGauss.fitTo(data,PrintLevel(-1));//
-    RooPlot *plot = x.frame();
-    data.plotOn(plot);
-    doubleGauss.plotOn(plot);
-    fout << col << sep << ph_bin << sep << deltaMean << sep << mean1val << sep << sig1 << sep << sig2 << sep << c2 << sep << plot->chiSquare() << endl;
-    
-    // delete canvas;
-    delete plot;
+    if (fitModel==singleGaussian){
+        // RooRealVar mean1("mean1","mean1",mean1val,dt_low,dt_up);
+        RooGaussian fitFunction("gauss1","gauss1",x,mean1,sigma1);
+        fitFunction.fitTo(data,RooFit::Minos(useMinos));//
+        RooPlot *plot = x.frame();
+        data.plotOn(plot);
+        fitFunction.plotOn(plot);
+        fout << col << sep << ph_bin << sep << deltaMean << sep << mean1val << sep << sig1 << sep << sig2 << sep << c2 << sep << plot->chiSquare() << endl;
+        delete plot;
+        // f1: fraction of entries in first gaussian
+        // RooRealVar f1("f1","f1",0.9,0.1,1.0);
+        // RooAddPdf fitFunction("singleGaussian","singleGaussian",RooArgList(gauss1,gauss2),RooArgList(f1,f2));
+    }
+    else{
+        if (fitModel==doubleGaussian){
+            RooRealVar mean2("mean2","mean2",mean1val-deltaMean,dt_low,dt_up);
+            RooRealVar sigma1("sigma1","sigma1",sig1,sig1min,sig1max);
+            RooGaussian gauss1("gauss1","gauss1",x,mean1,sigma1);
+            RooRealVar sigma2("sigma2","sigma2",sig2,sig2min,sig2max);
+            RooGaussian gauss2("gauss2","gauss2",x,mean2,sigma2);
+            // f1: fraction of entries in first gaussian
+            RooRealVar f1("f1","f1",0.9,0.1,1.0);
+            RooRealVar f2("f2","f2",0.01,0.01,c2);
+            RooAddPdf fitFunction("doubleGauss","doubleGauss",RooArgList(gauss1,gauss2),RooArgList(f1,f2));
+            fitFunction.fitTo(data,RooFit::Minos(useMinos));//
+            RooPlot *plot = x.frame();
+            data.plotOn(plot);
+            fitFunction.plotOn(plot);
+            fout << col << sep << ph_bin << sep << deltaMean << sep << mean1val << sep << sig1 << sep << sig2 << sep << c2 << sep << plot->chiSquare() << endl;
+            delete plot;
+        }
+        else
+        {
+            if (fitModel==tripleGaussian){
+                // RooRealVar mean1("mean1","mean1",mean1val,dt_low,dt_up);
+                RooRealVar mean2("mean2","mean2",mean1val-deltaMean,dt_low,dt_up);
+                RooRealVar mean3("mean3","mean3",mean1val,dt_low,dt_up);
+                // RooRealVar sigma1("sigma1","sigma1",sig1,sig1min,sig1max);
+                RooGaussian gauss1("gauss1","gauss1",x,mean1,sigma1);
+                RooRealVar sigma2("sigma2","sigma2",sig2,sig2min,sig2max);
+                RooGaussian gauss2("gauss2","gauss2",x,mean2,sigma2);
+                RooRealVar sigma3("sigma2","sigma2",sig1,sig1min,sig1max);
+                RooGaussian gauss3("gauss2","gauss2",x,mean3,sigma3);
+                // f1: fraction of entries in first gaussian
+                RooRealVar f1("f1","f1",0.9,0.1,1.0);
+                RooRealVar f2("f2","f2",0.01,0.01,c2);
+                RooRealVar f3("f3","f3",0.1,0.01,0.3);
+                RooAddPdf fitFunction("tripleGaussian","tripleGaussian",RooArgList(gauss1,gauss2,gauss3),RooArgList(f1,f2,f3));
+                fitFunction.fitTo(data,RooFit::Minos(useMinos));//
+                RooPlot *plot = x.frame();
+                data.plotOn(plot);
+                fitFunction.plotOn(plot);
+                fout << col << sep << ph_bin << sep << deltaMean << sep << mean1val << sep << sig1 << sep << sig2 << sep << c2 << sep << plot->chiSquare() << endl;
+                delete plot;
+            }
+            else
+            {  
+                cout << "Error! Incorrect choosen model.";
+                EXIT_FAILURE;
+            }
+            
+        }
+        
+    }
 
     fitResults fResults;
     
