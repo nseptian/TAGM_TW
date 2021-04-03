@@ -1,6 +1,8 @@
 {
     "files.associations": {
-        "doVariationGaussianFit.C": "cpp"
+        "doVariationGaussianFit.C": "cpp",
+        "gaussianFit_TAGM.C": "cpp",
+        "TAGMTWExtractor.C": "cpp"
     },
     "C_Cpp.default.includePath": [
         "/d/home/septian/anaconda3/envs/TAGM_TW/include"

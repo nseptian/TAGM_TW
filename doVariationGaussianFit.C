@@ -21,9 +21,9 @@ fitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int ph_bin,
                                     double c2);
 
 //some parameters to configure
-const Int_t col=40; //first column to fit
+const Int_t col=20; //first column to fit
 const Int_t ncol=1; //number of column to fit
-const Int_t ph_binlow[ncol]= {28
+const Int_t ph_binlow[ncol]= {23
                         // 20,23,24,20,23,//1-5
                         // 15,19,20,25,26,//6-10
                         // 24,25,24,22,25,//11-15
