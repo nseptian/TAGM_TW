@@ -199,13 +199,13 @@ fitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int ph_bin, 
                         RooRealVar meanBkg2("meanBkg2","meanBkg2",sgnMean-deltaMean,dtLowLims,bkg3MeanMax);
                         RooRealVar meanBkg1("meanBkg1","meanBkg1",sgnMean,sgnMean-0.5,sgnMean+0.5);
                         RooGaussian gauss1("gauss1","gauss1",x,meanSgn,sigmaSgn);
-                        RooRealVar sigma2("sigma2","sigma2",bkg2Sig,bkg2SigMin,bkg2SigMax);
-                        RooGaussian gauss2("gauss2","gauss2",x,meanBkg2,sigma2);
+                        RooRealVar sigmaBkg2("sigmaBkg2","sigmaBkg2",bkg2Sig,bkg2SigMin,bkg2SigMax);
+                        RooGaussian gauss2("gauss2","gauss2",x,meanBkg2,sigmaBkg2);
                         RooRealVar sigmaBkg1("sigmaBkg1","sigmaBkg1",sgnSig,bkg1SigMin,bkg1SigMax);
                         RooGaussian gauss3("gauss3","gauss3",x,meanBkg1,sigmaBkg1);
-                        RooRealVar f2("f2","f2",c2,0.01,0.4);
+                        RooRealVar cBkg2("cBkg2","cBkg2",c2,0.01,0.4);
                         RooRealVar cBkg1("cBkg1","cBkg1",c1,0.01,0.4);
-                        RooAddPdf fitFunction("tripleGaussian","tripleGaussian",RooArgList(gauss2,gauss3,gauss1),RooArgList(f2,cBkg1));
+                        RooAddPdf fitFunction("tripleGaussian","tripleGaussian",RooArgList(gauss2,gauss3,gauss1),RooArgList(cBkg2,cBkg1));
                         fitFunction.fitTo(data,RooFit::PrintLevel(-1),RooFit::Minos(useMinos));//
                         data.plotOn(plot);
                         fitFunction.plotOn(plot,LineColor(kRed));
