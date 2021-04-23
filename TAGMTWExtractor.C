@@ -12,7 +12,7 @@ enum model{
 };
 
 TH1* GetHistogram(TFile *f, int col, int ph_bin);
-fitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int ph_bin, double bkg3MeanMax);
+fitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int ph_bin, double bkg2MeanMax, TString resultSubFolder);
 double GetMode(TH1 *h);
 double GetDipBinCenter(TH1 *h);
 vector<int> GetNumberOfPP(TFile *f);
@@ -50,17 +50,20 @@ const Int_t dtUpLims=7;
 
 const double sgnSigMin = 0.01;
 const double sgnSigMax = 1.0;
-const double bkg2SigMin = 0.3;
-const double bkg2SigMax = 0.6;
 const double bkg1SigMin = 0.8;
 const double bkg1SigMax = 10.0;
+const double bkg2SigMin = 0.3;
+const double bkg2SigMax = 0.6;
 
 const double deltaMean = 2;
 const double sgnSig = 0.6;
-const double bkg2Sig = 0.2;
 const double bkg1Sig = 2.0;
-const double c2 = 0.4;
+const double bkg2Sig = 0.2;
 const double c1 = 0.1;
+const double c2 = 0.4;
+TString resultFolder = "resultTAGMTWExtractor/";
+TString rootFileFolder = "/d/grid17/sdobbs/2019-11-mon/mon_ver17/";
+TString rootFilePrefix = "hd_root_";
 
 // model fitModel = tripleGaussian;
 // const bool useModelBasedOnChi2 = kTRUE;//if TRUE set ch2Thres and model options;
@@ -70,31 +73,33 @@ const model fitModelOptions[nModel] = {doubleGaussian,tripleGaussian}; //fitMode
 const double chi2Thres[2] = {1.0,3.0};
 const double chi2PPLims = 0.8; 
 
+int TAGMTWExtractor(TString runNumber) {
 
-int TAGMTWExtractor(TString rootFile="root/hd_root-r72369.root") {
+    TString rootFile=rootFileFolder+rootFilePrefix+runNumber+".root";
 
     gROOT->SetBatch(kTRUE);
 
     TFile *f = new TFile(rootFile,"read");
     vector<int> numberOfPP = GetNumberOfPP(f);
     for(int icol=0;icol<ncol;icol++) ppUpLims[icol] = ppLowLims[icol]+numberOfPP[icol];
-    system("mkdir -p results_TAGMTWExtractor");
-    // system("mkdir -p projectionY")
+    TString makeDir = "mkdir -p ";
+    makeDir += resultFolder; 
+    system(makeDir);
     TCanvas *c0 = new TCanvas();
-    
+    TString resultSubFolder = resultFolder+runNumber+"/";
     TGraph *g[ncol];
     for(int j=col;j<col+ncol;j++){
         stringstream ss; ss << j;
-        ofstream fout; fout.open("results_TAGMTWExtractor/chi2Fit_col_"+TString(ss.str())+".csv");
+        ofstream fout; fout.open(resultSubFolder+"chi2Fit_col_"+TString(ss.str())+".csv");
         const int n = numberOfPP[j-col];
         Float_t meanGraph[n];
         Float_t ppGraph[n];
-        double bkg3MeanMax;
+        double bkg2MeanMax;
         for (int i=ppLowLims[j-col];i<ppUpLims[j-col];i++) {
             TH1 *h = GetHistogram(f,j,i);
             h->Draw();
-            if (i==ppLowLims[j-col]) bkg3MeanMax = GetDipBinCenter(h);
-            fitResults fR = WriteGaussianFitResults(fout,h,j,i,bkg3MeanMax);
+            if (i==ppLowLims[j-col]) bkg2MeanMax = GetDipBinCenter(h);
+            fitResults fR = WriteGaussianFitResults(fout,h,j,i,bkg2MeanMax,resultSubFolder);
             meanGraph[i-ppLowLims[j-col]]=fR.mean;
             ppGraph[i-ppLowLims[j-col]]=(i-0.5)*(dPPbin);
             delete h;
@@ -108,15 +113,15 @@ int TAGMTWExtractor(TString rootFile="root/hd_root-r72369.root") {
         namegrTitle+=j;
         g[j-col]->SetTitle(namegrTitle);
         g[j-col]->Draw("ap");
-        TString grEpsName;
-        grEpsName = "results_TAGMTWExtractor/";
-        grEpsName += "gr_pp_vs_dt_fitted_";
-        grEpsName += j;
-        grEpsName += ".pdf";
-        c0->Print(grEpsName);
+        TString pdfName;
+        pdfName = resultSubFolder;
+        pdfName += "gr_pp_vs_dt_fitted_";
+        pdfName += j;
+        pdfName += ".pdf";
+        c0->Print(pdfName);
         if (j-col>0) delete g[j-col-1];
         if (j==col+ncol-1) delete g[j-col];
-        cout << "bkg3MeanMax = " << bkg3MeanMax << endl;
+        // cout << "bkg2MeanMax = " << bkg2MeanMax << endl;
         fout.close();
     }
     return 0;
@@ -136,7 +141,7 @@ TH1* GetHistogram(TFile *f, int col, int ph_bin) {
     return h;
 }
 
-fitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int ph_bin, double bkg3MeanMax) {
+fitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int ph_bin, double bkg2MeanMax,TString resultSubFolder) {
     TString sep = ",";
     const double sgnMean = GetMode(h); //get maximum bin center
 
@@ -147,7 +152,11 @@ fitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int ph_bin, 
     RooDataHist data("data","data",RooArgList(x),h);
     
     stringstream ss; ss << col;
-    system(TString("mkdir -p results_TAGMTWExtractor/column_"+ss.str()).Data());
+    TString makeDirFit = "mkdir -p ";
+    makeDirFit += resultSubFolder;
+    makeDirFit += "column_";
+    makeDirFit += TString(ss.str());
+    system(makeDirFit);
 
     fitResults fResults;
     for (int iModel=0;iModel<nModel;iModel++){
@@ -196,15 +205,15 @@ fitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int ph_bin, 
                 else
                 {
                     if (fitModelOptions[iModel]==tripleGaussian){
-                        RooRealVar meanBkg2("meanBkg2","meanBkg2",sgnMean-deltaMean,dtLowLims,bkg3MeanMax);
                         RooRealVar meanBkg1("meanBkg1","meanBkg1",sgnMean,sgnMean-0.5,sgnMean+0.5);
+                        RooRealVar meanBkg2("meanBkg2","meanBkg2",sgnMean-deltaMean,dtLowLims,bkg2MeanMax);
                         RooGaussian gauss1("gauss1","gauss1",x,meanSgn,sigmaSgn);
                         RooRealVar sigmaBkg2("sigmaBkg2","sigmaBkg2",bkg2Sig,bkg2SigMin,bkg2SigMax);
                         RooGaussian gauss2("gauss2","gauss2",x,meanBkg2,sigmaBkg2);
                         RooRealVar sigmaBkg1("sigmaBkg1","sigmaBkg1",sgnSig,bkg1SigMin,bkg1SigMax);
                         RooGaussian gauss3("gauss3","gauss3",x,meanBkg1,sigmaBkg1);
-                        RooRealVar cBkg2("cBkg2","cBkg2",c2,0.01,0.4);
                         RooRealVar cBkg1("cBkg1","cBkg1",c1,0.01,0.4);
+                        RooRealVar cBkg2("cBkg2","cBkg2",c2,0.01,0.4);
                         RooAddPdf fitFunction("tripleGaussian","tripleGaussian",RooArgList(gauss2,gauss3,gauss1),RooArgList(cBkg2,cBkg1));
                         fitFunction.fitTo(data,RooFit::PrintLevel(-1),RooFit::Minos(useMinos));//
                         data.plotOn(plot);
@@ -227,7 +236,7 @@ fitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int ph_bin, 
             }
         
         // cout << endl << "chi2 = " << chi2Fit << endl;
-        canvas->Print("results_TAGMTWExtractor/column_"+TString(ss.str())+"/"+TString(h->GetName())+".pdf");
+        canvas->Print(resultSubFolder+"column_"+TString(ss.str())+"/"+TString(h->GetName())+".pdf");
         delete plot;    
         delete canvas;
 
