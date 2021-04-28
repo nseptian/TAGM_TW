@@ -1,7 +1,7 @@
 
 using namespace RooFit;
 
-struct fitResults
+struct gaussianFitResults
 {
     int ph_bin;
     float mean;
@@ -12,37 +12,39 @@ enum model{
 };
 
 TH1* GetHistogram(TFile *f, int col, int ph_bin);
-fitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int ph_bin, double bkg2MeanMax, TString resultSubFolder);
+gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int ph_bin, double bkg2MeanMax, TString resultSubFolder);
 double GetMode(TH1 *h);
 double GetDipBinCenter(TH1 *h);
 vector<int> GetNumberOfPP(TFile *f);
+void WriteTWFitResults(TGraph *gr);
 
 //some parameters to configure
 const Int_t col=2;//first column to fit
 const Int_t ncol=99;//number of column to fit
-const Int_t ppLowLims[ncol]= {
-                         /*20,*/23,24,20,23,//1-5
-                        15,19,21,25,26,//6-10
-                        24,25,24,22,25,//11-15
-                        23,24,23,25,23,//16-20
-                        27,26,25,26,21,//21-25
-                        23,25,23,27,23,//26-30
-                        24,31,23,22,22,//31-35
-                        21,27,27,25,28,//36-40
-                        25,23,13,11,15,//41-45
-                        14,13,11,14,13,//46-50
-                        11,16,15,12,14,//51-55
-                        14,15,16,14,14,//56-60
-                        13,17,19,17,15,//61-65
-                        13,17,19,16,17,//66-70
-                        15,17,11,17,12,//71-76
-                        15,15,15,13,18,//76-80
-                        15,15,15,17,16,//81-85
-                        14,10,18,17,15,//86-90
-                        17,17,15,18,14,//91-95
-                        15,12,17,14,16
-                        };//96-100
-const int numbOfEntriesLims = 2000;
+Int_t ppLowLims[ncol];
+                        //  /*20,*/23//,24,20,23,//1-5
+                        // 15,19,21,25,26,//6-10
+                        // 24,25,24,22,25,//11-15
+                        // 23,24,23,25,23,//16-20
+                        // 27,26,25,26,21,//21-25
+                        // 23,25,23,27,23,//26-30
+                        // 24,31,23,22,22,//31-35
+                        // 21,27,27,25,28,//36-40
+                        // 25,23,13,11,15,//41-45
+                        // 14,13,11,14,13,//46-50
+                        // 11,16,15,12,14,//51-55
+                        // 14,15,16,14,14,//56-60
+                        // 13,17,19,17,15,//61-65
+                        // 13,17,19,16,17,//66-70
+                        // 15,17,11,17,12,//71-76
+                        // 15,15,15,13,18,//76-80
+                        // 15,15,15,17,16,//81-85
+                        // 14,10,18,17,15,//86-90
+                        // 17,17,15,18,14,//91-95
+                        // 15,12,17,14,16
+                        // };//96-100
+
+const int numbOfEntriesLims = 3500;
 Int_t ppUpLims[ncol];
 const Float_t dPPbin=16;
 const Int_t dtLowLims=-3;
@@ -62,8 +64,12 @@ const double bkg2Sig = 0.2;
 const double c1 = 0.1;
 const double c2 = 0.4;
 TString resultFolder = "resultTAGMTWExtractor/";
-TString rootFileFolder = "/d/grid17/sdobbs/2019-11-mon/mon_ver17/";
-TString rootFilePrefix = "hd_root_";
+TString rootFileFolder = "root/";
+TString rootFilePrefix = "hd_root-r";
+
+// TString resultFolder = "resultTAGMTWExtractor/";
+// TString rootFileFolder = "/d/grid17/sdobbs/2019-11-mon/mon_ver17/";
+// TString rootFilePrefix = "hd_root_";
 
 // model fitModel = tripleGaussian;
 // const bool useModelBasedOnChi2 = kTRUE;//if TRUE set ch2Thres and model options;
@@ -73,7 +79,7 @@ const model fitModelOptions[nModel] = {doubleGaussian,tripleGaussian}; //fitMode
 const double chi2Thres[2] = {1.0,3.0};
 const double chi2PPLims = 0.8; 
 
-int TAGMTWExtractor(TString runNumber) {
+int TAGMTWExtractor(TString runNumber="72369") {
 
     TString rootFile=rootFileFolder+rootFilePrefix+runNumber+".root";
 
@@ -81,7 +87,6 @@ int TAGMTWExtractor(TString runNumber) {
 
     TFile *f = new TFile(rootFile,"read");
     vector<int> numberOfPP = GetNumberOfPP(f);
-    for(int icol=0;icol<ncol;icol++) ppUpLims[icol] = ppLowLims[icol]+numberOfPP[icol];
     TString makeDir = "mkdir -p ";
     makeDir += resultFolder; 
     system(makeDir);
@@ -99,7 +104,7 @@ int TAGMTWExtractor(TString runNumber) {
             TH1 *h = GetHistogram(f,j,i);
             h->Draw();
             if (i==ppLowLims[j-col]) bkg2MeanMax = GetDipBinCenter(h);
-            fitResults fR = WriteGaussianFitResults(fout,h,j,i,bkg2MeanMax,resultSubFolder);
+            gaussianFitResults fR = WriteGaussianFitResults(fout,h,j,i,bkg2MeanMax,resultSubFolder);
             meanGraph[i-ppLowLims[j-col]]=fR.mean;
             ppGraph[i-ppLowLims[j-col]]=(i-0.5)*(dPPbin);
             delete h;
@@ -112,6 +117,7 @@ int TAGMTWExtractor(TString runNumber) {
         TString namegrTitle = "Timewalk col ";
         namegrTitle+=j;
         g[j-col]->SetTitle(namegrTitle);
+        WriteTWFitResults(g[j-col]);
         g[j-col]->Draw("ap");
         TString pdfName;
         pdfName = resultSubFolder;
@@ -119,8 +125,8 @@ int TAGMTWExtractor(TString runNumber) {
         pdfName += j;
         pdfName += ".pdf";
         c0->Print(pdfName);
-        if (j-col>0) delete g[j-col-1];
-        if (j==col+ncol-1) delete g[j-col];
+        // if (j-col>0) delete g[j-col-1];
+        // if (j==col+ncol-1) delete g[j-col];
         // cout << "bkg2MeanMax = " << bkg2MeanMax << endl;
         fout.close();
     }
@@ -141,7 +147,7 @@ TH1* GetHistogram(TFile *f, int col, int ph_bin) {
     return h;
 }
 
-fitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int ph_bin, double bkg2MeanMax,TString resultSubFolder) {
+gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int ph_bin, double bkg2MeanMax,TString resultSubFolder) {
     TString sep = ",";
     const double sgnMean = GetMode(h); //get maximum bin center
 
@@ -158,7 +164,7 @@ fitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int ph_bin, 
     makeDirFit += TString(ss.str());
     system(makeDirFit);
 
-    fitResults fResults;
+    gaussianFitResults fResults;
     for (int iModel=0;iModel<nModel;iModel++){
         TCanvas *canvas = new TCanvas("c","c",800,500);
         RooPlot *plot = x.frame();
@@ -257,18 +263,33 @@ double GetMode(TH1 *h) {
 }
 
 vector<int> GetNumberOfPP(TFile *f){ //get number of PP
-    vector<int> tempVec;
+    vector<int> vecIterator;
     for(int j=col;j<col+ncol;j++){
         int iterator=0;
-        for (int i=ppLowLims[j-col];i<99999;i++) {
+        int ppLLims=-1;
+        vector<double> vecMode;
+        for (int i=0;i<99999;i++) {
             TH1 *h = GetHistogram(f,j,i);
             int entries = h->GetEntries();
-            if (entries < numbOfEntriesLims) break;
-            else iterator++;
+            if ((entries > numbOfEntriesLims) && (ppLLims==-1)){
+                ppLLims = i;
+            }
+            if (ppLLims != -1){
+                if (entries < numbOfEntriesLims) break;
+                else {
+                    iterator++;
+                    vecMode.push_back(GetMode(h));
+                    // cout << entries << endl;
+                }
+            }
         }
-        tempVec.push_back(iterator);
+        int maxModeIdx = max_element(vecMode.begin(),vecMode.end()) - vecMode.begin();
+        ppLowLims[j-col] = ppLLims+maxModeIdx;
+        ppUpLims[j-col] = ppLLims+iterator;
+        iterator -= maxModeIdx;
+        vecIterator.push_back(iterator);
     }
-    return tempVec;
+    return vecIterator;
 }
 
 double GetDipBinCenter(TH1 *h){
@@ -289,4 +310,20 @@ double GetDipBinCenter(TH1 *h){
         upperBin-=1;
     } while(avgBinUsed < prevAvgBinUsed);
     return h->GetBinCenter(upperBin-9);
+}
+
+void WriteTWFitResults(TGraph *gr){
+
+    Float_t xLowLims = gr->GetXaxis()->GetXmin();
+    Float_t xUpLims = gr->GetXaxis()->GetXmax();
+
+    TF1 *twFitFunction = new TF1("twFitFunction","[0] + [1]*((1/([4]*x+[3]))^[2])",xLowLims,xUpLims);
+    twFitFunction->SetParameter(0,-0.0661505);
+    twFitFunction->SetParameter(1,5.55105e+08);
+    twFitFunction->SetParameter(2,42.7598);
+    twFitFunction->SetParameter(3,1.43117);
+    twFitFunction->SetParameter(4,0.000330912);
+
+    gr->Fit("twFitFunction","EM");
+
 }
