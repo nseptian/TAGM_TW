@@ -16,7 +16,7 @@ gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int 
 double GetMode(TH1 *h);
 double GetDipBinCenter(TH1 *h);
 vector<int> GetNumberOfPP(TFile *f);
-void WriteTWFitResults(TGraph *gr);
+void WriteTWFitResults(ofstream &fouttw, TGraph *gr, Int_t col);
 
 //some parameters to configure
 const Int_t col=2;//first column to fit
@@ -63,13 +63,13 @@ const double bkg1Sig = 2.0;
 const double bkg2Sig = 0.2;
 const double c1 = 0.1;
 const double c2 = 0.4;
-TString resultFolder = "resultTAGMTWExtractor/";
-TString rootFileFolder = "root/";
-TString rootFilePrefix = "hd_root-r";
-
 // TString resultFolder = "resultTAGMTWExtractor/";
-// TString rootFileFolder = "/d/grid17/sdobbs/2019-11-mon/mon_ver17/";
-// TString rootFilePrefix = "hd_root_";
+// TString rootFileFolder = "root/";
+// TString rootFilePrefix = "hd_root-r";
+
+TString resultFolder = "resultTAGMTWExtractor/";
+TString rootFileFolder = "/d/grid17/sdobbs/2019-11-mon/mon_ver17/";
+TString rootFilePrefix = "hd_root_";
 
 // model fitModel = tripleGaussian;
 // const bool useModelBasedOnChi2 = kTRUE;//if TRUE set ch2Thres and model options;
@@ -93,6 +93,7 @@ int TAGMTWExtractor(TString runNumber="72369") {
     TCanvas *c0 = new TCanvas();
     TString resultSubFolder = resultFolder+runNumber+"/";
     TGraph *g[ncol];
+    ofstream fouttw; fouttw.open(resultFolder+"TWFit_"+runNumber+".csv");
     for(int j=col;j<col+ncol;j++){
         stringstream ss; ss << j;
         ofstream fout; fout.open(resultSubFolder+"chi2Fit_col_"+TString(ss.str())+".csv");
@@ -117,7 +118,7 @@ int TAGMTWExtractor(TString runNumber="72369") {
         TString namegrTitle = "Timewalk col ";
         namegrTitle+=j;
         g[j-col]->SetTitle(namegrTitle);
-        WriteTWFitResults(g[j-col]);
+        WriteTWFitResults(fouttw,g[j-col],j);
         g[j-col]->Draw("ap");
         TString pdfName;
         pdfName = resultSubFolder;
@@ -130,6 +131,7 @@ int TAGMTWExtractor(TString runNumber="72369") {
         // cout << "bkg2MeanMax = " << bkg2MeanMax << endl;
         fout.close();
     }
+    fouttw.close();
     return 0;
 }
 
@@ -271,15 +273,15 @@ vector<int> GetNumberOfPP(TFile *f){ //get number of PP
         for (int i=0;i<99999;i++) {
             TH1 *h = GetHistogram(f,j,i);
             int entries = h->GetEntries();
+            // cout << entries << " " << GetMode(h) <<  endl;
             if ((entries > numbOfEntriesLims) && (ppLLims==-1)){
                 ppLLims = i;
             }
             if (ppLLims != -1){
-                if (entries < numbOfEntriesLims) break;
+                if (entries < numbOfEntriesLims-(0.1*numbOfEntriesLims)) break;
                 else {
                     iterator++;
                     vecMode.push_back(GetMode(h));
-                    // cout << entries << endl;
                 }
             }
         }
@@ -312,7 +314,8 @@ double GetDipBinCenter(TH1 *h){
     return h->GetBinCenter(upperBin-9);
 }
 
-void WriteTWFitResults(TGraph *gr){
+void WriteTWFitResults(ofstream &fouttw, TGraph *gr, Int_t col){
+    TString separator = ",";
 
     Float_t xLowLims = gr->GetXaxis()->GetXmin();
     Float_t xUpLims = gr->GetXaxis()->GetXmax();
@@ -324,6 +327,14 @@ void WriteTWFitResults(TGraph *gr){
     twFitFunction->SetParameter(3,1.43117);
     twFitFunction->SetParameter(4,0.000330912);
 
-    gr->Fit("twFitFunction","EM");
+    TFitResultPtr TWFitResultPtr = gr->Fit("twFitFunction","EMS");
+    Double_t p0 = TWFitResultPtr->Value(0);
+    Double_t p1 = TWFitResultPtr->Value(1);
+    Double_t p2 = TWFitResultPtr->Value(2);
+    Double_t p3 = TWFitResultPtr->Value(3);
+    Double_t p4 = TWFitResultPtr->Value(4);
+    Double_t chi2tw = TWFitResultPtr->Chi2();
+    Int_t fitStatus = TWFitResultPtr;
 
+    fouttw << col << separator << p0 << separator << p1 << separator << p2 << separator << p3 << separator << p4 << separator << chi2tw << separator << fitStatus << endl;
 }
