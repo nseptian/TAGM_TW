@@ -4,7 +4,9 @@ using namespace RooFit;
 struct gaussianFitResults
 {
     int ph_bin;
-    float mean;
+    float mean1;
+    float mean2;
+    float cMean2;
 };
 
 enum model{
@@ -98,16 +100,25 @@ int TAGMTWExtractor(TString runNumber="72369") {
         stringstream ss; ss << j;
         ofstream fout; fout.open(resultSubFolder+"chi2Fit_col_"+TString(ss.str())+".csv");
         const int n = numberOfPP[j-col];
+        if (n==0) continue;
         Float_t meanGraph[n];
         Float_t ppGraph[n];
         double bkg2MeanMax;
+        double prevMean;
         for (int i=ppLowLims[j-col];i<ppUpLims[j-col];i++) {
             TH1 *h = GetHistogram(f,j,i);
             h->Draw();
             if (i==ppLowLims[j-col]) bkg2MeanMax = GetDipBinCenter(h);
             gaussianFitResults fR = WriteGaussianFitResults(fout,h,j,i,bkg2MeanMax,resultSubFolder);
-            meanGraph[i-ppLowLims[j-col]]=fR.mean;
+            if (i==ppLowLims[j-col]) meanGraph[i-ppLowLims[j-col]]=fR.mean1;
+            else{
+                double mean1Diff = abs(fR.mean1-prevMean);
+                double mean2Diff = abs(fR.mean2-prevMean);
+                if ((mean1Diff > mean2Diff) && (fR.cMean2 > 0.5)) meanGraph[i-ppLowLims[j-col]]=fR.mean2;
+                else meanGraph[i-ppLowLims[j-col]]=fR.mean1;
+            }       
             ppGraph[i-ppLowLims[j-col]]=(i-0.5)*(dPPbin);
+            prevMean = meanGraph[i-ppLowLims[j-col]];
             delete h;
         }
         g[j-col] = new TGraph(n,ppGraph,meanGraph);
@@ -189,7 +200,9 @@ gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int 
                 chi2Fit = plot->chiSquare();
                 fitFunction.paramOn(plot,Layout(0.9,0.6,0.9),Format("NEU",AutoPrecision(1)));
                 plot->Draw();
-                fResults.mean = meanSgn.getVal();
+                fResults.mean1 = meanSgn.getVal();
+                fResults.mean2 = 0;
+                fResults.cMean2 = 0;
             }
             else{
                 if (fitModelOptions[iModel]==doubleGaussian){
@@ -197,7 +210,7 @@ gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int 
                     RooGaussian gauss1("gauss1","gauss1",x,meanSgn,sigmaSgn);
                     RooRealVar sigmaBkg1("sigmaBkg1","sigmaBkg1",bkg1Sig,bkg1SigMin,bkg1SigMax);
                     RooGaussian gauss2("gauss2","gauss2",x,meanBkg1,sigmaBkg1);
-                    RooRealVar cBkg1("cBkg1","cBkg1",c1,0.00,0.8);
+                    RooRealVar cBkg1("cBkg1","cBkg1",c1,0.00,1.0);
                     RooAddPdf fitFunction("doubleGauss","doubleGauss",RooArgList(gauss2,gauss1),RooArgList(cBkg1));
                     fitFunction.fitTo(data,RooFit::PrintLevel(-1),RooFit::Minos(useMinos));//
                     data.plotOn(plot);
@@ -207,7 +220,9 @@ gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int 
                     fitFunction.plotOn(plot,Components("gauss2"),LineColor(kGreen),LineStyle(kDashed));
                     fitFunction.paramOn(plot,Layout(0.9,0.6,0.9),Format("NEU",AutoPrecision(1)));
                     plot->Draw();
-                    fResults.mean = meanSgn.getVal();
+                    fResults.mean1 = meanSgn.getVal();
+                    fResults.mean2 = meanBkg1.getVal();
+                    fResults.cMean2 = cBkg1.getVal();
                     fout << col << sep << (ph_bin-0.5)*dPPbin << sep << "doubleGaussian" << sep << chi2Fit << endl;
                 }
                 else
@@ -232,7 +247,9 @@ gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int 
                         fitFunction.plotOn(plot,Components("gauss3"),LineColor(kYellow),LineStyle(kDashed));
                         fitFunction.paramOn(plot,Layout(0.9,0.6,0.9),Format("NEU",AutoPrecision(1)));
                         plot->Draw();
-                        fResults.mean = meanSgn.getVal();
+                        fResults.mean1 = meanSgn.getVal();
+                        fResults.mean2 = meanBkg2.getVal();
+                        fResults.cMean2 = cBkg2.getVal();
                         fout << col << sep << (ph_bin-0.5)*dPPbin << sep << "tripleGaussian" << sep << chi2Fit << endl;
                     }
                     else
@@ -270,10 +287,10 @@ vector<int> GetNumberOfPP(TFile *f){ //get number of PP
         int iterator=0;
         int ppLLims=-1;
         vector<double> vecMode;
-        for (int i=0;i<99999;i++) {
+        for (int i=10;i<99999;i++) {
             TH1 *h = GetHistogram(f,j,i);
             int entries = h->GetEntries();
-            // cout << entries << " " << GetMode(h) <<  endl;
+            cout << entries << " " << GetMode(h) <<  endl;
             if ((entries > numbOfEntriesLims) && (ppLLims==-1)){
                 ppLLims = i;
             }
@@ -281,7 +298,7 @@ vector<int> GetNumberOfPP(TFile *f){ //get number of PP
                 if (entries < numbOfEntriesLims-(0.1*numbOfEntriesLims)) break;
                 else {
                     iterator++;
-                    vecMode.push_back(GetMode(h));
+                    if (iterator<11) vecMode.push_back(GetMode(h));
                 }
             }
         }
@@ -327,7 +344,7 @@ void WriteTWFitResults(ofstream &fouttw, TGraph *gr, Int_t col){
     twFitFunction->SetParameter(3,1.43117);
     twFitFunction->SetParameter(4,0.000330912);
 
-    TFitResultPtr TWFitResultPtr = gr->Fit("twFitFunction","EMS");
+    TFitResultPtr TWFitResultPtr = gr->Fit("twFitFunction","MS");
     Double_t p0 = TWFitResultPtr->Value(0);
     Double_t p1 = TWFitResultPtr->Value(1);
     Double_t p2 = TWFitResultPtr->Value(2);
@@ -336,5 +353,6 @@ void WriteTWFitResults(ofstream &fouttw, TGraph *gr, Int_t col){
     Double_t chi2tw = TWFitResultPtr->Chi2();
     Int_t fitStatus = TWFitResultPtr;
 
-    fouttw << col << separator << p0 << separator << p1 << separator << p2 << separator << p3 << separator << p4 << separator << chi2tw << separator << fitStatus << endl;
+    fouttw << col << separator << p0 << separator << p1 << separator << p2 << separator << p3 << separator << chi2tw << separator << fitStatus << endl;
 }
+//  separator << p4
