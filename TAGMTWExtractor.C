@@ -165,6 +165,8 @@ gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int 
     TString sep = ",";
     const double sgnMean = GetMode(h); //get maximum bin center
 
+    if (bkg2MeanMax >= sgnMean) bkg2MeanMax = sgnMean-0.3;
+
     double chi2Th = chi2Thres[0];
     if (TMath::Abs(sgnMean) < chi2PPLims) chi2Th = chi2Thres[1];
 
@@ -276,7 +278,7 @@ gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int 
 
 double GetMode(TH1 *h) {
     TH1 *h0 = (TH1*)h->Clone("h0");
-    if (h0->GetEntries() == 0.0) return 999.0;
+    if (h0->GetEntries() == 0.0) return 9999.0;
     double xmin = h->GetXaxis()->GetXmin();
     double xmax = h->GetXaxis()->GetXmax();
     double binWidth = h->GetXaxis()->GetBinWidth(0);
@@ -290,7 +292,7 @@ double GetMode(TH1 *h) {
     int max_bin = h0->GetMaximumBin();
     // cout << max_bin << endl;
     double max = h0->GetBinContent(max_bin);
-    if (max < 7.0) return 999.0;
+    if (max < 100) return 9999.0;
     return h0->GetBinCenter(max_bin);
 }
 
@@ -303,15 +305,16 @@ vector<int> GetNumberOfPP(TFile *f){ //get number of PP
         for (int i=10;i<99999;i++) {
             TH1 *h = GetHistogram(f,j,i);
             int entries = h->GetEntries();
-            // cout << entries << " " << GetMode(h) <<  endl;
-            if ((entries > numbOfEntriesLims) && (ppLLims==-1)){
+            double mode = GetMode(h);
+            cout << entries << " " << GetMode(h) <<  endl;
+            if ((entries > numbOfEntriesLims) && (ppLLims==-1) && mode!=9999.0){
                 ppLLims = i;
             }
             if (ppLLims != -1){
                 if (entries < numbOfEntriesLims-(0.1*numbOfEntriesLims)) break;
                 else {
                     iterator++;
-                    if (iterator<11) vecMode.push_back(GetMode(h));
+                    if (iterator<11) vecMode.push_back(mode);
                 }
             }
         }
