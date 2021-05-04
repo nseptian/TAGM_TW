@@ -53,32 +53,32 @@ const Int_t dtLowLims=-3;
 const Int_t dtUpLims=7;
 
 const double sgnSigMin = 0.01;
-const double sgnSigMax = 1.0;
+const double sgnSigMax = 2.0;
 const double bkg1SigMin = 0.8;
 const double bkg1SigMax = 10.0;
 const double bkg2SigMin = 0.3;
 const double bkg2SigMax = 0.6;
 
-const double deltaMean = 2;
+const double deltaMean = 2.5;
 const double sgnSig = 0.6;
 const double bkg1Sig = 2.0;
 const double bkg2Sig = 0.2;
 const double c1 = 0.1;
 const double c2 = 0.4;
-// TString resultFolder = "resultTAGMTWExtractor/";
-// TString rootFileFolder = "root/";
-// TString rootFilePrefix = "hd_root-r";
-
 TString resultFolder = "resultTAGMTWExtractor/";
-TString rootFileFolder = "/d/grid17/sdobbs/2019-11-mon/mon_ver17/";
-TString rootFilePrefix = "hd_root_";
+TString rootFileFolder = "root/";
+TString rootFilePrefix = "hd_root-r";
+
+// TString resultFolder = "resultTAGMTWExtractor/";
+// TString rootFileFolder = "/d/grid17/sdobbs/2019-11-mon/mon_ver17/";
+// TString rootFilePrefix = "hd_root_";
 
 // model fitModel = tripleGaussian;
 // const bool useModelBasedOnChi2 = kTRUE;//if TRUE set ch2Thres and model options;
 const bool useMinos = kTRUE; 
 const int nModel = 2;
 const model fitModelOptions[nModel] = {doubleGaussian,tripleGaussian}; //fitModelOptions[0] is the primary model
-const double chi2Thres[2] = {1.0,3.0};
+const double chi2Thres[2] = {1.0,5.0};
 const double chi2PPLims = 0.8; 
 
 int TAGMTWExtractor(TString runNumber="72369") {
@@ -154,6 +154,7 @@ TH1* GetHistogram(TFile *f, int col, int ph_bin) {
     TH1 *h;
     h = h2->ProjectionY(TString(h2->GetName())+"_"+TString(ss_ph.str()),ph_bin,ph_bin);
     h->GetXaxis()->SetRangeUser(dtLowLims,dtUpLims);
+    
     // h->Draw();
     h->SetTitle("TAGM column "+TString(ss_c.str())+", Pulse-peak "+TString(ss_ph.str()));
     h->GetXaxis()->SetTitle("time(TDC) - time(RF) [ns]");
@@ -236,7 +237,7 @@ gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int 
                         RooRealVar sigmaBkg1("sigmaBkg1","sigmaBkg1",sgnSig,bkg1SigMin,bkg1SigMax);
                         RooGaussian gauss3("gauss3","gauss3",x,meanBkg1,sigmaBkg1);
                         RooRealVar cBkg1("cBkg1","cBkg1",c1,0.01,0.4);
-                        RooRealVar cBkg2("cBkg2","cBkg2",c2,0.01,0.4);
+                        RooRealVar cBkg2("cBkg2","cBkg2",c2,0.01,0.6);
                         RooAddPdf fitFunction("tripleGaussian","tripleGaussian",RooArgList(gauss2,gauss3,gauss1),RooArgList(cBkg2,cBkg1));
                         fitFunction.fitTo(data,RooFit::PrintLevel(-1),RooFit::Minos(useMinos));//
                         data.plotOn(plot);
@@ -274,11 +275,23 @@ gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int 
 }
 
 double GetMode(TH1 *h) {
-    if (h->GetEntries() == 0.0) return 999.0;
-    int max_bin = h->GetMaximumBin();
-    double max = h->GetBinContent(max_bin);
+    TH1 *h0 = (TH1*)h->Clone("h0");
+    if (h0->GetEntries() == 0.0) return 999.0;
+    double xmin = h->GetXaxis()->GetXmin();
+    double xmax = h->GetXaxis()->GetXmax();
+    double binWidth = h->GetXaxis()->GetBinWidth(0);
+    int low_bin = ((0-xmin)/binWidth)-1;
+    // cout << "range:" << xmin << "," << xmax << "," << binWidth << endl;
+    // cout << "low_bin=" << low_bin << " , " << h0->GetBinCenter(low_bin) << endl;
+    // cout << h0->GetTitle() << endl;
+    // cout << "maxbin before set range " << h0->GetBinCenter(h0->GetMaximumBin()) << endl;
+    h0->GetXaxis()->SetRange(200,300);
+    // cout << "maxbin after set range " << h0->GetBinCenter(h0->GetMaximumBin()) << endl;
+    int max_bin = h0->GetMaximumBin();
+    // cout << max_bin << endl;
+    double max = h0->GetBinContent(max_bin);
     if (max < 7.0) return 999.0;
-    return h->GetBinCenter(max_bin);
+    return h0->GetBinCenter(max_bin);
 }
 
 vector<int> GetNumberOfPP(TFile *f){ //get number of PP
@@ -290,7 +303,7 @@ vector<int> GetNumberOfPP(TFile *f){ //get number of PP
         for (int i=10;i<99999;i++) {
             TH1 *h = GetHistogram(f,j,i);
             int entries = h->GetEntries();
-            cout << entries << " " << GetMode(h) <<  endl;
+            // cout << entries << " " << GetMode(h) <<  endl;
             if ((entries > numbOfEntriesLims) && (ppLLims==-1)){
                 ppLLims = i;
             }
@@ -312,7 +325,8 @@ vector<int> GetNumberOfPP(TFile *f){ //get number of PP
 }
 
 double GetDipBinCenter(TH1 *h){
-    int upperBin = h->GetMaximumBin();
+    double mode = GetMode(h);
+    int upperBin = 1+(mode - h->GetXaxis()->GetXmin())/h->GetXaxis()->GetBinWidth(0);
     const int nBinUsed = 15;
     int binUsed[nBinUsed];
     double prevAvgBinUsed;
