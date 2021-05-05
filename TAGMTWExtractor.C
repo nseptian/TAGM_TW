@@ -82,7 +82,7 @@ const model fitModelOptions[nModel] = {doubleGaussian,tripleGaussian}; //fitMode
 const double chi2Thres[2] = {1.0,5.0};
 const double chi2PPLims = 0.8; 
 
-int TAGMTWExtractor(TString runNumber="72369") {
+int TAGMTWExtractor(TString runNumber="071734") {
 
     TString rootFile=rootFileFolder+rootFilePrefix+runNumber+".root";
 
@@ -112,7 +112,10 @@ int TAGMTWExtractor(TString runNumber="72369") {
             h->Draw();
             if (i==ppLowLims[j-col]) bkg2MeanMax = GetDipBinCenter(h);
             gaussianFitResults fR = WriteGaussianFitResults(fout,h,j,i,bkg2MeanMax,resultSubFolder);
-            if (i==ppLowLims[j-col]) meanGraph[i-ppLowLims[j-col]]=fR.mean1;
+            if (i==ppLowLims[j-col]){
+                if (fR.cMean2 > 0.5) meanGraph[i-ppLowLims[j-col]]=max(fR.mean1,fR.mean2);
+                else meanGraph[i-ppLowLims[j-col]]=fR.mean1;
+            } 
             else{
                 double mean1Diff = abs(fR.mean1-prevMean);
                 double mean2Diff = abs(fR.mean2-prevMean);
