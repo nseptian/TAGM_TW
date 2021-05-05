@@ -65,13 +65,14 @@ const double bkg1Sig = 2.0;
 const double bkg2Sig = 0.2;
 const double c1 = 0.1;
 const double c2 = 0.4;
-TString resultFolder = "resultTAGMTWExtractor/";
-TString rootFileFolder = "root/";
-TString rootFilePrefix = "hd_root-r";
 
 // TString resultFolder = "resultTAGMTWExtractor/";
-// TString rootFileFolder = "/d/grid17/sdobbs/2019-11-mon/mon_ver17/";
-// TString rootFilePrefix = "hd_root_";
+// TString rootFileFolder = "root/";
+// TString rootFilePrefix = "hd_root-r";
+
+TString resultFolder = "resultTAGMTWExtractor/";
+TString rootFileFolder = "/d/grid17/sdobbs/2019-11-mon/mon_ver17/";
+TString rootFilePrefix = "hd_root_";
 
 // model fitModel = tripleGaussian;
 // const bool useModelBasedOnChi2 = kTRUE;//if TRUE set ch2Thres and model options;
@@ -89,6 +90,7 @@ int TAGMTWExtractor(TString runNumber="72369") {
 
     TFile *f = new TFile(rootFile,"read");
     vector<int> numberOfPP = GetNumberOfPP(f);
+    // return 1;
     TString makeDir = "mkdir -p ";
     makeDir += resultFolder; 
     system(makeDir);
@@ -213,7 +215,7 @@ gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int 
                     RooGaussian gauss1("gauss1","gauss1",x,meanSgn,sigmaSgn);
                     RooRealVar sigmaBkg1("sigmaBkg1","sigmaBkg1",bkg1Sig,bkg1SigMin,bkg1SigMax);
                     RooGaussian gauss2("gauss2","gauss2",x,meanBkg1,sigmaBkg1);
-                    RooRealVar cBkg1("cBkg1","cBkg1",c1,0.00,1.0);
+                    RooRealVar cBkg1("cBkg1","cBkg1",c1,0.01,0.6);
                     RooAddPdf fitFunction("doubleGauss","doubleGauss",RooArgList(gauss2,gauss1),RooArgList(cBkg1));
                     fitFunction.fitTo(data,RooFit::PrintLevel(-1),RooFit::Minos(useMinos));//
                     data.plotOn(plot);
@@ -280,20 +282,22 @@ double GetMode(TH1 *h) {
     TH1 *h0 = (TH1*)h->Clone("h0");
     if (h0->GetEntries() == 0.0) return 9999.0;
     double xmin = h->GetXaxis()->GetXmin();
-    double xmax = h->GetXaxis()->GetXmax();
+    // double xmax = h->GetXaxis()->GetXmax();
     double binWidth = h->GetXaxis()->GetBinWidth(0);
-    int low_bin = ((0-xmin)/binWidth)-1;
+    int low_bin = ((0.2-xmin)/binWidth);
     // cout << "range:" << xmin << "," << xmax << "," << binWidth << endl;
     // cout << "low_bin=" << low_bin << " , " << h0->GetBinCenter(low_bin) << endl;
     // cout << h0->GetTitle() << endl;
     // cout << "maxbin before set range " << h0->GetBinCenter(h0->GetMaximumBin()) << endl;
-    h0->GetXaxis()->SetRange(200,300);
+    h0->GetXaxis()->SetRange(low_bin,low_bin+100);
     // cout << "maxbin after set range " << h0->GetBinCenter(h0->GetMaximumBin()) << endl;
     int max_bin = h0->GetMaximumBin();
     // cout << max_bin << endl;
     double max = h0->GetBinContent(max_bin);
-    if (max < 100) return 9999.0;
-    return h0->GetBinCenter(max_bin);
+    if (max < 150) return 9999.0;
+    double max_binCenter = h0->GetBinCenter(max_bin);
+    delete h0;
+    return max_binCenter;
 }
 
 vector<int> GetNumberOfPP(TFile *f){ //get number of PP
@@ -303,25 +307,38 @@ vector<int> GetNumberOfPP(TFile *f){ //get number of PP
         int ppLLims=-1;
         vector<double> vecMode;
         for (int i=10;i<99999;i++) {
+            // if (iterator == 8) break;
             TH1 *h = GetHistogram(f,j,i);
             int entries = h->GetEntries();
             double mode = GetMode(h);
-            cout << entries << " " << GetMode(h) <<  endl;
-            if ((entries > numbOfEntriesLims) && (ppLLims==-1) && mode!=9999.0){
-                ppLLims = i;
+            // cout << entries << " " << GetMode(h) <<  endl;
+            if ((entries > numbOfEntriesLims) && (ppLLims==-1) && mode<9000.0){
+                ppLLims = i+1;
             }
             if (ppLLims != -1){
                 if (entries < numbOfEntriesLims-(0.1*numbOfEntriesLims)) break;
                 else {
-                    iterator++;
-                    if (iterator<11) vecMode.push_back(mode);
+                    if (mode<9000.0) {
+                        iterator++;
+                        if (iterator<11) vecMode.push_back(mode);
+                    }
+                    else {
+                        if (iterator<11){
+                            iterator=0;
+                            ppLLims=i+1;
+                            vecMode.clear();
+                        }
+                        else break;
+                    }
                 }
             }
         }
+        iterator--;
         int maxModeIdx = max_element(vecMode.begin(),vecMode.end()) - vecMode.begin();
         ppLowLims[j-col] = ppLLims+maxModeIdx;
         ppUpLims[j-col] = ppLLims+iterator;
         iterator -= maxModeIdx;
+        // iterator--;
         vecIterator.push_back(iterator);
     }
     return vecIterator;
