@@ -99,10 +99,10 @@ int TAGMTWExtractor(TString runNumber="071734") {
     TGraph *g[ncol];
     ofstream fouttw; fouttw.open(resultFolder+"TWFit_"+runNumber+".csv");
     for(int j=col;j<col+ncol;j++){
-        stringstream ss; ss << j;
-        ofstream fout; fout.open(resultSubFolder+"chi2Fit_col_"+TString(ss.str())+".csv");
         const int n = numberOfPP[j-col];
         if (n==0) continue;
+        stringstream ss; ss << j;
+        ofstream fout; fout.open(resultSubFolder+"chi2Fit_col_"+TString(ss.str())+".csv");
         Float_t meanGraph[n];
         Float_t ppGraph[n];
         double bkg2MeanMax;
