@@ -6,6 +6,8 @@ struct gaussianFitResults
     int ph_bin;
     float mean1;
     float mean2;
+    float sigma1;
+    float sigma2;
     float cMean2;
 };
 
@@ -18,7 +20,7 @@ gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int 
 double GetMode(TH1 *h);
 double GetDipBinCenter(TH1 *h);
 vector<int> GetNumberOfPP(TFile *f);
-void WriteTWFitResults(ofstream &fouttw, TGraph *gr, Int_t col);
+// void WriteTWFitResults(ofstream &fouttw, TGraphErrors *gr, Int_t col);
 
 //some parameters to configure
 const Int_t col=2;//first column to fit
@@ -66,13 +68,14 @@ const double bkg2Sig = 0.2;
 const double c1 = 0.1;
 const double c2 = 0.4;
 
-// TString resultFolder = "resultTAGMTWExtractor/";
-// TString rootFileFolder = "root/";
-// TString rootFilePrefix = "hd_root-r";
-
 TString resultFolder = "resultTAGMTWExtractor/";
-TString rootFileFolder = "/d/grid17/sdobbs/2019-11-mon/mon_ver17/";
-TString rootFilePrefix = "hd_root_";
+TString rootFileFolder = "root/";
+TString rootFilePrefix = "hd_root-r";
+TString rootFileOutputPrefix = "TW_";
+
+// TString resultFolder = "resultTAGMTWExtractor/";
+// TString rootFileFolder = "/d/grid17/sdobbs/2019-11-mon/mon_ver17/";
+// TString rootFilePrefix = "hd_root_";
 
 // model fitModel = tripleGaussian;
 // const bool useModelBasedOnChi2 = kTRUE;//if TRUE set ch2Thres and model options;
@@ -82,7 +85,7 @@ const model fitModelOptions[nModel] = {doubleGaussian,tripleGaussian}; //fitMode
 const double chi2Thres[2] = {1.0,5.0};
 const double chi2PPLims = 0.8; 
 
-int TAGMTWExtractor(TString runNumber="071734") {
+int TAGMTWExtractor(TString runNumber="72369") {
 
     TString rootFile=rootFileFolder+rootFilePrefix+runNumber+".root";
 
@@ -96,14 +99,18 @@ int TAGMTWExtractor(TString runNumber="071734") {
     system(makeDir);
     TCanvas *c0 = new TCanvas();
     TString resultSubFolder = resultFolder+runNumber+"/";
-    TGraph *g[ncol];
-    ofstream fouttw; fouttw.open(resultFolder+"TWFit_"+runNumber+".csv");
+    TGraphErrors *g[ncol];
+    // ofstream fouttw; fouttw.open(resultFolder+"TWFit_"+runNumber+".csv");
+    TString rootFileOutputName = resultFolder+rootFileOutputPrefix+runNumber+".root";
+    TFile *fOutput = new TFile(rootFileOutputName,"recreate");
+
     for(int j=col;j<col+ncol;j++){
         const int n = numberOfPP[j-col];
         if (n==0) continue;
         stringstream ss; ss << j;
         ofstream fout; fout.open(resultSubFolder+"chi2Fit_col_"+TString(ss.str())+".csv");
         Float_t meanGraph[n];
+        Float_t meanErrorGraph[n];
         Float_t ppGraph[n];
         double bkg2MeanMax;
         double prevMean;
@@ -113,20 +120,33 @@ int TAGMTWExtractor(TString runNumber="071734") {
             if (i==ppLowLims[j-col]) bkg2MeanMax = GetDipBinCenter(h);
             gaussianFitResults fR = WriteGaussianFitResults(fout,h,j,i,bkg2MeanMax,resultSubFolder);
             if (i==ppLowLims[j-col]){
-                if (fR.cMean2 > 0.5) meanGraph[i-ppLowLims[j-col]]=max(fR.mean1,fR.mean2);
-                else meanGraph[i-ppLowLims[j-col]]=fR.mean1;
+                if (fR.cMean2 > 0.5) {
+                    meanGraph[i-ppLowLims[j-col]]=max(fR.mean1,fR.mean2);
+                    if (fR.mean1 > fR.mean2) meanErrorGraph[i-ppLowLims[j-col]]=fR.sigma1;
+                    else meanErrorGraph[i-ppLowLims[j-col]]=fR.sigma2;
+                }
+                else {
+                    meanGraph[i-ppLowLims[j-col]]=fR.mean1;
+                    meanErrorGraph[i-ppLowLims[j-col]]=fR.sigma1;
+                }
             } 
             else{
                 double mean1Diff = abs(fR.mean1-prevMean);
                 double mean2Diff = abs(fR.mean2-prevMean);
-                if ((mean1Diff > mean2Diff) && (fR.cMean2 > 0.5)) meanGraph[i-ppLowLims[j-col]]=fR.mean2;
-                else meanGraph[i-ppLowLims[j-col]]=fR.mean1;
+                if ((mean1Diff > mean2Diff) && (fR.cMean2 > 0.5)) {
+                    meanGraph[i-ppLowLims[j-col]]=fR.mean2;
+                    meanErrorGraph[i-ppLowLims[j-col]]=fR.sigma2;
+                }
+                else {
+                    meanGraph[i-ppLowLims[j-col]]=fR.mean1;
+                    meanErrorGraph[i-ppLowLims[j-col]]=fR.sigma1;
+                }
             }       
             ppGraph[i-ppLowLims[j-col]]=(i-0.5)*(dPPbin);
             prevMean = meanGraph[i-ppLowLims[j-col]];
             delete h;
         }
-        g[j-col] = new TGraph(n,ppGraph,meanGraph);
+        g[j-col] = new TGraphErrors(n,ppGraph,meanGraph,0,meanErrorGraph);
         g[j-col]->SetMarkerSize(1);
         g[j-col]->SetMarkerStyle(kStar);
         g[j-col]->GetXaxis()->SetTitle("Pulse peak (adc counts)");
@@ -134,12 +154,15 @@ int TAGMTWExtractor(TString runNumber="071734") {
         TString namegrTitle = "Timewalk col ";
         namegrTitle+=j;
         g[j-col]->SetTitle(namegrTitle);
-        WriteTWFitResults(fouttw,g[j-col],j);
+        // WriteTWFitResults(fouttw,g[j-col],j);
         g[j-col]->Draw("ap");
         TString pdfName;
         pdfName = resultSubFolder;
         pdfName += "gr_pp_vs_dt_fitted_";
+        TString grName = "gr_pp_vs_dt_fitted_";
         pdfName += j;
+        grName += j;
+        g[j-col]->Write(grName);
         pdfName += ".pdf";
         c0->Print(pdfName);
         // if (j-col>0) delete g[j-col-1];
@@ -147,7 +170,7 @@ int TAGMTWExtractor(TString runNumber="071734") {
         // cout << "bkg2MeanMax = " << bkg2MeanMax << endl;
         fout.close();
     }
-    fouttw.close();
+    // fouttw.close();
     return 0;
 }
 
@@ -229,7 +252,9 @@ gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int 
                     fitFunction.paramOn(plot,Layout(0.9,0.6,0.9),Format("NEU",AutoPrecision(1)));
                     plot->Draw();
                     fResults.mean1 = meanSgn.getVal();
+                    fResults.sigma1 = sigmaSgn.getVal();
                     fResults.mean2 = meanBkg1.getVal();
+                    fResults.sigma2 = sigmaBkg1.getVal();
                     fResults.cMean2 = cBkg1.getVal();
                     fout << col << sep << (ph_bin-0.5)*dPPbin << sep << "doubleGaussian" << sep << chi2Fit << endl;
                 }
@@ -256,7 +281,9 @@ gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int 
                         fitFunction.paramOn(plot,Layout(0.9,0.6,0.9),Format("NEU",AutoPrecision(1)));
                         plot->Draw();
                         fResults.mean1 = meanSgn.getVal();
+                        fResults.sigma1 = sigmaSgn.getVal();
                         fResults.mean2 = meanBkg2.getVal();
+                        fResults.sigma2 = sigmaBkg2.getVal();
                         fResults.cMean2 = cBkg2.getVal();
                         fout << col << sep << (ph_bin-0.5)*dPPbin << sep << "tripleGaussian" << sep << chi2Fit << endl;
                     }
@@ -368,28 +395,29 @@ double GetDipBinCenter(TH1 *h){
     return h->GetBinCenter(upperBin-9);
 }
 
-void WriteTWFitResults(ofstream &fouttw, TGraph *gr, Int_t col){
-    TString separator = ",";
+// void WriteTWFitResults(ofstream &fouttw, TGraph *gr, Int_t col){
+//     TString separator = ",";
 
-    Float_t xLowLims = gr->GetXaxis()->GetXmin();
-    Float_t xUpLims = gr->GetXaxis()->GetXmax();
+//     Float_t xLowLims = gr->GetXaxis()->GetXmin();
+//     Float_t xUpLims = gr->GetXaxis()->GetXmax();
 
-    TF1 *twFitFunction = new TF1("twFitFunction","[0] + [1]*((1/([4]*x+[3]))^[2])",xLowLims,xUpLims);
-    twFitFunction->SetParameter(0,-0.0661505);
-    twFitFunction->SetParameter(1,5.55105e+08);
-    twFitFunction->SetParameter(2,42.7598);
-    twFitFunction->SetParameter(3,1.43117);
-    twFitFunction->SetParameter(4,0.000330912);
+//     TF1 *twFitFunction = new TF1("twFitFunction","[0] + [1]*((1/([4]*x+[3]))^[2])",xLowLims,xUpLims);
+//     twFitFunction->SetParameter(0,-0.0661505);
+//     twFitFunction->SetParameter(1,5.55105e+08);
+//     twFitFunction->SetParameter(2,42.7598);
+//     twFitFunction->SetParameter(3,1.43117);
+//     twFitFunction->SetParameter(4,0.000330912);
 
-    TFitResultPtr TWFitResultPtr = gr->Fit("twFitFunction","MS");
-    Double_t p0 = TWFitResultPtr->Value(0);
-    Double_t p1 = TWFitResultPtr->Value(1);
-    Double_t p2 = TWFitResultPtr->Value(2);
-    Double_t p3 = TWFitResultPtr->Value(3);
-    Double_t p4 = TWFitResultPtr->Value(4);
-    Double_t chi2tw = TWFitResultPtr->Chi2();
-    Int_t fitStatus = TWFitResultPtr;
+//     TFitResultPtr TWFitResultPtr = gr->Fit("twFitFunction","MS");
+//     Double_t p0 = TWFitResultPtr->Value(0);
+//     Double_t p1 = TWFitResultPtr->Value(1);
+//     Double_t p2 = TWFitResultPtr->Value(2);
+//     Double_t p3 = TWFitResultPtr->Value(3);
+//     Double_t p4 = TWFitResultPtr->Value(4);
+//     Double_t chi2tw = TWFitResultPtr->Chi2();
+//     Int_t fitStatus = TWFitResultPtr;
 
-    fouttw << col << separator << p0 << separator << p1 << separator << p2 << separator << p3 << separator << chi2tw << separator << fitStatus << endl;
-}
+//     fouttw << col << separator << p0 << separator << p1 << separator << p2 << separator << p3 << separator << chi2tw << separator << fitStatus << endl;
+//     delete twFitFunction;
+// }
 //  separator << p4
