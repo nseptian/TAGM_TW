@@ -29,6 +29,8 @@ double GetMode(TH1 *h);
 parsForTripleGaussian GetParsForTripleGaussian(TH1 *h);
 double GetDipBinCenter(TH1 *h, double mode);
 vector<vector<int>> GetPP(TFile *f);
+vector<int> IdentifyBadFit(Int_t n, Float_t* means,Float_t* errors);
+int GetGraphLowerLimsIdx(const int n, Float_t* means, Float_t* pps);
 // void WriteTWFitResults(ofstream &fouttw, TGraphErrors *gr, Int_t col);
 
 //some parameters to configure
@@ -88,16 +90,16 @@ const double c2 = 0.4;
 TString resultFolder = "resultTAGMTWExtractor/";
 
 // local sample
-TString rootFileFolder = "root/";
-TString rootFilePrefix = "hd_root-r";
+// TString rootFileFolder = "root/";
+// TString rootFilePrefix = "hd_root-r";
 
 // datasets
-// TString rootFileFolder = "/d/grid17/sdobbs/2017-01-mon/mon_ver34/rootfiles/"; //03XXX
+TString rootFileFolder = "/d/grid17/sdobbs/2017-01-mon/mon_ver34/rootfiles/"; //03XXX
 // TString rootFileFolder = "/d/grid17/sdobbs/2018-01-mon/mon_ver21/rootfiles/"; //04XXX
 // TString rootFileFolder = "/d/grid17/sdobbs/2018-08-mon/mon_ver15/rootfiles/"; //05XXX
 // TString rootFileFolder = "/d/grid17/sdobbs/2019-01-mon/mon_ver15/rootfiles/"; //06XXX
 // TString rootFileFolder = "/d/grid17/sdobbs/2019-11-mon/mon_ver17/"; //07XXX
-// TString rootFilePrefix = "hd_root_";
+TString rootFilePrefix = "hd_root_";
 
 TString rootFileOutputPrefix = "TW_";
 
@@ -109,7 +111,7 @@ const bool useMinos = kTRUE;
 const double chi2DiffThres = 0.6;
 const double maxModeBinContentTrpGauss = 1000;
 
-int TAGMTWExtractor(TString runNumber="72369") {
+int TAGMTWExtractor(TString runNumber="030277") {
 
     TString rootFile=rootFileFolder+rootFilePrefix+runNumber+".root";
 
@@ -179,7 +181,52 @@ int TAGMTWExtractor(TString runNumber="72369") {
                 prevMean = meanGraph[i];
                 delete h;
             }
-            g[j-col] = new TGraphErrors(n,ppGraph,meanGraph,0,meanErrorGraph);
+
+            vector<int> badFit = IdentifyBadFit(n,meanGraph,meanErrorGraph);
+            const int cleanedN = n - badFit.size();
+            Float_t cleanedMeanGraph[cleanedN];
+            Float_t cleanedMeanErrorGraph[cleanedN];
+            Float_t cleanedPPGraph[cleanedN];
+
+            int nDifference = 0;
+            for (int z=0;z<n;z++){
+                bool isDiscarded = false;
+                for (int y=0;y<badFit.size();y++){
+                    if (z==badFit[y]){
+                        isDiscarded = true;
+                        nDifference++;
+                    }
+                }
+                if (!isDiscarded) {
+                    cleanedMeanGraph[z-nDifference] = meanGraph[z];
+                    cleanedMeanErrorGraph[z-nDifference] = meanErrorGraph[z];
+                    cleanedPPGraph[z-nDifference] = ppGraph[z];
+                }
+            }
+            // cout << cleanedN << " " << badFit.size() << endl;
+
+            if (cleanedN<=0) {
+                //dummy graph for empty pulse peak
+                Double_t xempty[6] = {200,300,400,500,600,700};
+                Double_t yempty[6] = {0.,0.,0.,0.,0.,0.};
+                g[j-col] = new TGraphErrors(6,xempty,yempty);
+            }
+            else{
+                int newLowerLims = GetGraphLowerLimsIdx(cleanedN,cleanedMeanGraph,cleanedPPGraph);
+                if (newLowerLims != 0) {
+                    const int finalN = cleanedN-newLowerLims;
+                    Float_t finalMeanGraph[finalN];
+                    Float_t finalMeanErrorGraph[finalN];
+                    Float_t finalPPGraph[finalN];
+                    for (int z=newLowerLims;z<cleanedN;z++){
+                        finalMeanGraph[z-newLowerLims] = cleanedMeanGraph[z];
+                        finalMeanErrorGraph[z-newLowerLims] = cleanedMeanErrorGraph[z];
+                        finalPPGraph[z-newLowerLims] = cleanedPPGraph[z];
+                    }
+                    g[j-col] = new TGraphErrors(finalN,finalPPGraph,finalMeanGraph,0,finalMeanErrorGraph);
+                }
+                else g[j-col] = new TGraphErrors(cleanedN,cleanedPPGraph,cleanedMeanGraph,0,cleanedMeanErrorGraph);
+            }
         }
         g[j-col]->SetMarkerSize(1);
         g[j-col]->SetMarkerStyle(kStar);
@@ -212,7 +259,7 @@ TH1* GetHistogram(TFile *f, int col, int ph_bin) {
     stringstream ss_c; ss_c << col;
     TH2I *h2 = (TH2I*)f->Get("TAGM_TW/t-rf/h_dt_vs_pp_"+TString(ss_c.str()));
     // h2->Draw("colz");
-    numbOfEntriesLims = 0.005*h2->GetEntries();
+    numbOfEntriesLims = 0.003*h2->GetEntries();
     stringstream ss_ph; ss_ph << h2->GetXaxis()->GetBinCenter(ph_bin);
     TH1 *h;
     h = h2->ProjectionY(TString(h2->GetName())+"_"+TString(ss_ph.str()),ph_bin,ph_bin);
@@ -316,7 +363,7 @@ gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int 
     }
     // cout << endl << "chi2 = " << chi2Fit << endl;
     canvas->Print(resultSubFolder+"column_"+TString(ss.str())+"/"+TString(h->GetName())+".pdf");
-    
+
     delete plotDouble;
     delete plotTriple;    
     delete canvas;
@@ -513,7 +560,7 @@ vector<vector<int>> GetPP(TFile *f){ //get PP
             int entries = h->GetEntries();
             double mode = GetMode(h);
             // cout << i << " ";
-            if ((entries > numbOfEntriesLims) && mode<9000.0){    
+            if ((entries > numbOfEntriesLims) && (mode < 9000.0) && (entries > 300)){    
                 cout << i << " " << entries << " " << GetMode(h) <<  endl;
                 vecIdxPPcol.push_back(i);
             }
@@ -585,6 +632,29 @@ double GetDipBinCenter(TH1 *h, double mode){
         upperBin-=1;
     } while(avgBinUsed < prevAvgBinUsed);
     return h->GetBinCenter(upperBin-9);
+}
+
+vector<int> IdentifyBadFit(Int_t n, Float_t* means,Float_t* errors){
+    vector<int> badFitIdx;
+    for (Int_t i=0;i<n;i++) {
+        if (errors[i] > 0.1){
+            badFitIdx.push_back(i);
+        }
+    }
+    return badFitIdx;
+}
+
+int GetGraphLowerLimsIdx(const int n, Float_t* means, Float_t* pps){
+    Float_t grads[n-1];
+    vector<int> badGrads;
+
+    for (int i=0;i<n-1;i++) {
+        grads[i] = (means[i+1]-means[i])/(pps[i+1]-pps[i]);
+        cout << i << " " << grads[i] << endl;
+    }
+    for (int i=0;i<n-1;i++) if ((grads[i]-grads[i+1])>0.04 && (grads[i+1] < 0.0)) badGrads.push_back(i+1);
+    if (badGrads.size() != 0) return badGrads[badGrads.size()-1];
+    else return 0;
 }
 
 // void WriteTWFitResults(ofstream &fouttw, TGraph *gr, Int_t col){
