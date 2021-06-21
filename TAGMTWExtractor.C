@@ -90,16 +90,16 @@ const double c2 = 0.4;
 TString resultFolder = "resultTAGMTWExtractor/";
 
 // local sample
-// TString rootFileFolder = "root/";
-// TString rootFilePrefix = "hd_root-r";
+TString rootFileFolder = "root/";
+TString rootFilePrefix = "hd_root-r";
 
 // datasets
-TString rootFileFolder = "/d/grid17/sdobbs/2017-01-mon/mon_ver34/rootfiles/"; //03XXX
+// TString rootFileFolder = "/d/grid17/sdobbs/2017-01-mon/mon_ver34/rootfiles/"; //03XXX
 // TString rootFileFolder = "/d/grid17/sdobbs/2018-01-mon/mon_ver21/rootfiles/"; //04XXX
 // TString rootFileFolder = "/d/grid17/sdobbs/2018-08-mon/mon_ver15/rootfiles/"; //05XXX
 // TString rootFileFolder = "/d/grid17/sdobbs/2019-01-mon/mon_ver15/rootfiles/"; //06XXX
 // TString rootFileFolder = "/d/grid17/sdobbs/2019-11-mon/mon_ver17/"; //07XXX
-TString rootFilePrefix = "hd_root_";
+// TString rootFilePrefix = "hd_root_";
 
 TString rootFileOutputPrefix = "TW_";
 
@@ -111,7 +111,7 @@ const bool useMinos = kTRUE;
 const double chi2DiffThres = 0.6;
 const double maxModeBinContentTrpGauss = 1000;
 
-int TAGMTWExtractor(TString runNumber="030277") {
+int TAGMTWExtractor(TString runNumber="30739_callibrated") {
 
     TString rootFile=rootFileFolder+rootFilePrefix+runNumber+".root";
 
@@ -155,7 +155,7 @@ int TAGMTWExtractor(TString runNumber="030277") {
                 // if (i==0) bkg2MeanMax = GetDipBinCenter(h);
                 gaussianFitResults fR = WriteGaussianFitResults(fout,h,j,idxPP,resultSubFolder);
                 if (i==0){
-                    if (fR.cMean2 > 0.5) {
+                    if (fR.cMean2 > 0.6) {
                         meanGraph[i]=max(fR.mean1,fR.mean2);
                         if (fR.mean1 > fR.mean2) meanErrorGraph[0]=fR.error1;
                         else meanErrorGraph[i]=fR.error2;
@@ -294,10 +294,10 @@ gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int 
     plotDouble->SetTitle(h->GetTitle());
     plotDouble->SetXTitle(h->GetXaxis()->GetTitle());
     plotDouble->SetTitleOffset(1.1,"Y");
-    RooRealVar meanSgnDouble("meanSgnDouble","meanSgnDouble",sgnMean,sgnMean-3.0,sgnMean+3.0);
+    RooRealVar meanSgnDouble("meanSgnDouble","meanSgnDouble",sgnMean,sgnMean-0.5,sgnMean+0.5);
     RooRealVar sigmaSgnDouble("sigmaSgnDouble","sigmaSgnDouble",sgnSig,sgnSigMin,sgnSigMax);
 
-    RooRealVar meanBkg1Double("meanBkg1Double","meanBkg1Double",sgnMean,sgnMean-3.0,sgnMean+3.0);
+    RooRealVar meanBkg1Double("meanBkg1Double","meanBkg1Double",sgnMean,sgnMean-2.0,sgnMean+2.0);
     RooGaussian gauss1Double("gauss1Double","gauss1Double",x,meanSgnDouble,sigmaSgnDouble);
     RooRealVar sigmaBkg1Double("sigmaBkg1Double","sigmaBkg1Double",bkg1Sig,bkg1SigMin,bkg1SigMax);
     RooGaussian gauss2Double("gauss2Double","gauss2Double",x,meanBkg1Double,sigmaBkg1Double);
@@ -348,7 +348,7 @@ gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int 
     double diffChi2Fit = abs(chi2FitDouble-chi2FitTriple);//(diffChi2Fit > chi2DiffThres) //|| ((cBkg1Double.getVal() <= 0.1) && (diffChi2Fit > 2.0)
     double diffMeanTriple = abs(meanSgnTriple.getVal()-meanBkg2Triple.getVal());
     double modeBinContent = h->GetBinContent(h->GetBin(meanSgnTriple.getVal()));
-    bool isTripleFunctionUsed = (diffMeanTriple > 1.0) && (cBkg2Triple.getVal() < 0.4) && (diffChi2Fit > chi2DiffThres) && (((chi2FitTriple < chi2FitDouble) && (modeBinContent < maxModeBinContentTrpGauss) && (cBkg1Double.getVal() >= 0.04)) || ((cBkg1Double.getVal() < 0.04) && (chi2FitTriple < chi2FitDouble)) || ((chi2FitDouble > 3.0)));
+    bool isTripleFunctionUsed = (diffMeanTriple > 1.0) && (cBkg2Triple.getVal() < 0.4) && (diffChi2Fit > chi2DiffThres) && (((chi2FitTriple < chi2FitDouble) && (modeBinContent < maxModeBinContentTrpGauss) && (cBkg1Double.getVal() >= 0.04)) || ((cBkg1Double.getVal() < 0.04) && (chi2FitTriple < chi2FitDouble))); //7XXXX  || ((chi2FitDouble > 3.0))
     if (isTripleFunctionUsed) {
         fitFunctionTriple.plotOn(plotTriple,Components("gauss1Triple"),LineColor(kBlue),LineStyle(kDashed));
         fitFunctionTriple.plotOn(plotTriple,Components("gauss2Triple"),LineColor(kGreen),LineStyle(kDashed));
@@ -560,7 +560,7 @@ vector<vector<int>> GetPP(TFile *f){ //get PP
             int entries = h->GetEntries();
             double mode = GetMode(h);
             // cout << i << " ";
-            if ((entries > numbOfEntriesLims) && (mode < 9000.0) && (entries > 300)){    
+            if (((entries > numbOfEntriesLims) && (mode < 9000.0) && (entries > 300)) || entries > 4000.0){    
                 cout << i << " " << entries << " " << GetMode(h) <<  endl;
                 vecIdxPPcol.push_back(i);
             }
@@ -647,12 +647,13 @@ vector<int> IdentifyBadFit(Int_t n, Float_t* means,Float_t* errors){
 int GetGraphLowerLimsIdx(const int n, Float_t* means, Float_t* pps){
     Float_t grads[n-1];
     vector<int> badGrads;
-
+    
+    if (n<10) return 0;
     for (int i=0;i<n-1;i++) {
         grads[i] = (means[i+1]-means[i])/(pps[i+1]-pps[i]);
         cout << i << " " << grads[i] << endl;
     }
-    for (int i=0;i<n-1;i++) if ((grads[i]-grads[i+1])>0.04 && (grads[i+1] < 0.0)) badGrads.push_back(i+1);
+    for (int i=0;i<10;i++) if ((grads[i]-grads[i+1])>0.003 && (grads[i+1] < -0.0001) && (grads[i]>-0.002)) badGrads.push_back(i+1);
     if (badGrads.size() != 0) return badGrads[badGrads.size()-1];
     else return 0;
 }
