@@ -1,2 +1,4 @@
 variation-gaussian-fits-csv/*
 resultTAGMTWExtractor/*
+print_uncorrected/*
+print_corrected/*
