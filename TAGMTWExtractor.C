@@ -19,54 +19,22 @@ struct parsForTripleGaussian
     double dip;
 };
 
-// enum model{
-//     singleGaussian,doubleGaussian,tripleGaussian
-// };
-
 TH1* GetHistogram(TFile *f, int col, int ph_bin);
-gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int ph_bin, TString resultSubFolder);
+gaussianFitResults DoGaussianFit(ofstream &fout, TH1 *h, int col, int ph_bin, TString resultSubFolder);
 double GetMode(TH1 *h);
 parsForTripleGaussian GetParsForTripleGaussian(TH1 *h);
 double GetDipBinCenter(TH1 *h, double mode);
 vector<vector<int>> GetPP(TFile *f);
 vector<int> IdentifyBadFit(Int_t n, Float_t* means,Float_t* errors);
 int GetGraphLowerLimsIdx(const int n, Float_t* means, Float_t* pps);
-// void WriteTWFitResults(ofstream &fouttw, TGraphErrors *gr, Int_t col);
 
 //some parameters to configure
 const Int_t col=1;//first column to fit
 const Int_t ncol=102;//number of column to fit
 Int_t ppLowLims[ncol];
-                        //  /*20,*/23//,24,20,23,//1-5
-                        // 15,19,21,25,26,//6-10
-                        // 24,25,24,22,25,//11-15
-                        // 23,24,23,25,23,//16-20
-                        // 27,26,25,26,21,//21-25
-                        // 23,25,23,27,23,//26-30
-                        // 24,31,23,22,22,//31-35
-                        // 21,27,27,25,28,//36-40
-                        // 25,23,13,11,15,//41-45
-                        // 14,13,11,14,13,//46-50
-                        // 11,16,15,12,14,//51-55
-                        // 14,15,16,14,14,//56-60
-                        // 13,17,19,17,15,//61-65
-                        // 13,17,19,16,17,//66-70
-                        // 15,17,11,17,12,//71-76
-                        // 15,15,15,13,18,//76-80
-                        // 15,15,15,17,16,//81-85
-                        // 14,10,18,17,15,//86-90
-                        // 17,17,15,18,14,//91-95
-                        // 15,12,17,14,16
-                        // };//96-100
-
-// const int numbOfEntriesLims = 3500; 07XXX
-// const int minModeBinContentSelPP = 100;
 
 int numbOfEntriesLims;
 const int minModeBinContentSelPP = 0;
-
-// const int numbOfEntriesLims = 50;
-// const int minModeBinContentSelPP = 10;
 
 Int_t ppUpLims[ncol];
 const Float_t dPPbin=16;
@@ -103,37 +71,33 @@ TString rootFilePrefix = "hd_root-r";
 
 TString rootFileOutputPrefix = "TW_";
 
-// model fitModel = tripleGaussian;
-// const bool useModelBasedOnChi2 = kTRUE;//if TRUE set ch2Thres and model options;
-const bool useMinos = kTRUE; 
-// const int nModel = 2;
-// const model fitModelOptions[nModel] = {doubleGaussian,tripleGaussian}; //fitModelOptions[0] is the primary model
+const bool useMinos = kTRUE;
 const double chi2DiffThres = 0.6;
 const double maxModeBinContentTrpGauss = 1000;
 
-int TAGMTWExtractor(TString runNumber="30739_callibrated") {
+int TAGMTWExtractor(TString runNumber="72369-29June2021") {
 
     TString rootFile=rootFileFolder+rootFilePrefix+runNumber+".root";
 
     gROOT->SetBatch(kTRUE);
 
     TFile *f = new TFile(rootFile,"read");
-    // vector<int> numberOfPP = GetNumberOfPP(f);
     
+    //select pulse peak to fit for all columns
     vector<vector<int>> SelectedPP = GetPP(f);
-    // return 1;
+
     TString makeDir = "mkdir -p ";
     makeDir += resultFolder; 
     system(makeDir);
     TCanvas *c0 = new TCanvas();
     TString resultSubFolder = resultFolder+runNumber+"/";
     TGraphErrors *g[ncol];
-    // ofstream fouttw; fouttw.open(resultFolder+"TWFit_"+runNumber+".txt");
     TString rootFileOutputName = resultFolder+rootFileOutputPrefix+runNumber+".root";
     TFile *fOutput = new TFile(rootFileOutputName,"recreate");
 
+    //loop over columns
     for(int j=col;j<col+ncol;j++){
-        const int n = SelectedPP[j-col].size();
+        const int n = SelectedPP[j-col].size(); //number of pulse peak to fit on each column
         // cout << "n = " << n << endl;
         stringstream ss; ss << j;
         ofstream fout; fout.open(resultSubFolder+"chi2Fit_col_"+TString(ss.str())+".csv");
@@ -148,12 +112,17 @@ int TAGMTWExtractor(TString runNumber="30739_callibrated") {
             Float_t meanErrorGraph[n];
             Float_t ppGraph[n];
             double prevMean;
+            //loop over selected pulse peak
             for (int i=0;i<n;i++) {
                 int idxPP = SelectedPP[j-col][i];
+                //Get histogram of selected pulse peak
                 TH1 *h = GetHistogram(f,j,idxPP);
                 h->Draw();
-                // if (i==0) bkg2MeanMax = GetDipBinCenter(h);
-                gaussianFitResults fR = WriteGaussianFitResults(fout,h,j,idxPP,resultSubFolder);
+
+                //Do gaussian fit
+                gaussianFitResults fR = DoGaussianFit(fout,h,j,idxPP,resultSubFolder);
+
+                //Choose gaussian mean and standard deviation
                 if (i==0){
                     if (fR.cMean2 > 0.6) {
                         meanGraph[i]=max(fR.mean1,fR.mean2);
@@ -182,6 +151,7 @@ int TAGMTWExtractor(TString runNumber="30739_callibrated") {
                 delete h;
             }
 
+            //Discard bad fits
             vector<int> badFit = IdentifyBadFit(n,meanGraph,meanErrorGraph);
             const int cleanedN = n - badFit.size();
             Float_t cleanedMeanGraph[cleanedN];
@@ -206,12 +176,13 @@ int TAGMTWExtractor(TString runNumber="30739_callibrated") {
             // cout << cleanedN << " " << badFit.size() << endl;
 
             if (cleanedN<=0) {
-                //dummy graph for empty pulse peak
+                //dummy graph for empty pulse peak after cleaning
                 Double_t xempty[6] = {200,300,400,500,600,700};
                 Double_t yempty[6] = {0.,0.,0.,0.,0.,0.};
                 g[j-col] = new TGraphErrors(6,xempty,yempty);
             }
             else{
+                //Re-set lower limit after discarding bad fits
                 int newLowerLims = GetGraphLowerLimsIdx(cleanedN,cleanedMeanGraph,cleanedPPGraph);
                 if (newLowerLims != 0) {
                     const int finalN = cleanedN-newLowerLims;
@@ -235,7 +206,6 @@ int TAGMTWExtractor(TString runNumber="30739_callibrated") {
         TString namegrTitle = "Timewalk col ";
         namegrTitle+=j;
         g[j-col]->SetTitle(namegrTitle);
-        // WriteTWFitResults(fouttw,g[j-col],j);
         g[j-col]->Draw("ap");
         TString pdfName;
         pdfName = resultSubFolder;
@@ -246,18 +216,16 @@ int TAGMTWExtractor(TString runNumber="30739_callibrated") {
         g[j-col]->Write(grName);
         pdfName += ".pdf";
         c0->Print(pdfName);
-        // if (j-col>0) delete g[j-col-1];
-        // if (j==col+ncol-1) delete g[j-col];
-        // cout << "bkg2MeanMax = " << bkg2MeanMax << endl;
         fout.close();
     }
     // fouttw.close();
     return 0;
 }
 
+//Get histogram
 TH1* GetHistogram(TFile *f, int col, int ph_bin) {
     stringstream ss_c; ss_c << col;
-    TH2I *h2 = (TH2I*)f->Get("TAGM_TW/t-rf/h_dt_vs_pp_"+TString(ss_c.str()));
+    TH2I *h2 = (TH2I*)f->Get("TAGM_TW/tdc-rf/h_dt_vs_pp_tdc_"+TString(ss_c.str()));
     // h2->Draw("colz");
     numbOfEntriesLims = 0.003*h2->GetEntries();
     stringstream ss_ph; ss_ph << h2->GetXaxis()->GetBinCenter(ph_bin);
@@ -271,7 +239,8 @@ TH1* GetHistogram(TFile *f, int col, int ph_bin) {
     return h;
 }
 
-gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int ph_bin,TString resultSubFolder) {
+//Gaussian fitter
+gaussianFitResults DoGaussianFit(ofstream &fout, TH1 *h, int col, int ph_bin,TString resultSubFolder) {
     TString sep = ",";
 
     RooRealVar x("TDC time difference","TDC time difference [ns]",dtLowLims,dtUpLims);
@@ -286,17 +255,16 @@ gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int 
 
     gaussianFitResults fResults;
 
-    //double gaussian fit
     double sgnMean = GetMode(h); //get maximum bin center
-    // if (bkg2MeanMax >= sgnMean) bkg2MeanMax = sgnMean-0.3;
     TCanvas *canvas = new TCanvas("c","c",800,500);
     RooPlot *plotDouble = x.frame();
     plotDouble->SetTitle(h->GetTitle());
     plotDouble->SetXTitle(h->GetXaxis()->GetTitle());
     plotDouble->SetTitleOffset(1.1,"Y");
+
+    //double gaussian fit
     RooRealVar meanSgnDouble("meanSgnDouble","meanSgnDouble",sgnMean,sgnMean-0.5,sgnMean+0.5);
     RooRealVar sigmaSgnDouble("sigmaSgnDouble","sigmaSgnDouble",sgnSig,sgnSigMin,sgnSigMax);
-
     RooRealVar meanBkg1Double("meanBkg1Double","meanBkg1Double",sgnMean,sgnMean-2.0,sgnMean+2.0);
     RooGaussian gauss1Double("gauss1Double","gauss1Double",x,meanSgnDouble,sigmaSgnDouble);
     RooRealVar sigmaBkg1Double("sigmaBkg1Double","sigmaBkg1Double",bkg1Sig,bkg1SigMin,bkg1SigMax);
@@ -318,7 +286,8 @@ gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int 
     fResults.cMean2 = cBkg1Double.getVal();
     fout << col << sep << (ph_bin-0.5)*dPPbin << sep << "doubleGaussian" << sep << chi2FitDouble << endl;
 
-    // triple gaussian fit
+    //triple gaussian fit
+    //determine initial parameters of tripe gaussian fitting
     parsForTripleGaussian params = GetParsForTripleGaussian(h);
     sgnMean = params.mean1;
     double bkg2Mean = params.mean2;
@@ -329,7 +298,6 @@ gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int 
     plotTriple->SetTitleOffset(1.1,"Y");
     RooRealVar meanSgnTriple("meanSgnTriple","meanSgnTriple",sgnMean,sgnMean-2.0,sgnMean+2.0);
     RooRealVar sigmaSgnTriple("sigmaSgnTriple","sigmaSgnTriple",sgnSig,sgnSigMin,sgnSigMax);
-
     RooRealVar meanBkg1Triple("meanBkg1Triple","meanBkg1Triple",sgnMean,sgnMean-3.0,sgnMean+3.0);
     RooRealVar meanBkg2Triple("meanBkg2Triple","meanBkg2Triple",bkg2Mean,bkg2Mean,bkg2MeanMax);
     RooGaussian gauss1Triple("gauss1Triple","gauss1Triple",x,meanSgnTriple,sigmaSgnTriple);
@@ -348,6 +316,7 @@ gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int 
     double diffChi2Fit = abs(chi2FitDouble-chi2FitTriple);//(diffChi2Fit > chi2DiffThres) //|| ((cBkg1Double.getVal() <= 0.1) && (diffChi2Fit > 2.0)
     double diffMeanTriple = abs(meanSgnTriple.getVal()-meanBkg2Triple.getVal());
     double modeBinContent = h->GetBinContent(h->GetBin(meanSgnTriple.getVal()));
+    //logic for choosing choosing appropriate result (double/triple), need more evaluation
     bool isTripleFunctionUsed = (diffMeanTriple > 1.0) && (cBkg2Triple.getVal() < 0.4) && (diffChi2Fit > chi2DiffThres) && (((chi2FitTriple < chi2FitDouble) && (modeBinContent < maxModeBinContentTrpGauss) && (cBkg1Double.getVal() >= 0.04)) || ((cBkg1Double.getVal() < 0.04) && (chi2FitTriple < chi2FitDouble))); //7XXXX  || ((chi2FitDouble > 3.0))
     if (isTripleFunctionUsed) {
         fitFunctionTriple.plotOn(plotTriple,Components("gauss1Triple"),LineColor(kBlue),LineStyle(kDashed));
@@ -372,130 +341,10 @@ gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int 
     return fResults;
 }
 
-// gaussianFitResults WriteGaussianFitResults(ofstream &fout, TH1 *h, int col, int ph_bin, double bkg2MeanMax,TString resultSubFolder) {
-//     TString sep = ",";
-//     const double sgnMean = GetMode(h); //get maximum bin center
-
-//     if (bkg2MeanMax >= sgnMean) bkg2MeanMax = sgnMean-0.3;
-
-//     double chi2Th = chi2Thres[0];
-//     if (TMath::Abs(sgnMean) < chi2PPLims) chi2Th = chi2Thres[1];
-
-//     RooRealVar x("TDC time difference","TDC time difference [ns]",dtLowLims,dtUpLims);
-//     RooDataHist data("data","data",RooArgList(x),h);
-    
-//     stringstream ss; ss << col;
-//     TString makeDirFit = "mkdir -p ";
-//     makeDirFit += resultSubFolder;
-//     makeDirFit += "column_";
-//     makeDirFit += TString(ss.str());
-//     system(makeDirFit);
-
-//     gaussianFitResults fResults;
-//     for (int iModel=0;iModel<nModel;iModel++){
-//         TCanvas *canvas = new TCanvas("c","c",800,500);
-//         RooPlot *plot = x.frame();
-
-//         plot->SetTitle(h->GetTitle());
-//         plot->SetXTitle(h->GetXaxis()->GetTitle());
-//         // plot->SetYTitle("TAGM hits");
-//         plot->SetTitleOffset(1.1,"Y");
-
-//         RooRealVar meanSgn("meanSgn","meanSgn",sgnMean,sgnMean-0.5,sgnMean+0.5);
-//         RooRealVar sigmaSgn("sigmaSgn","sigmaSgn",sgnSig,sgnSigMin,sgnSigMax);
-
-//         double chi2Fit=99999;
-
-//         if (fitModelOptions[iModel]==singleGaussian){
-//                 RooGaussian fitFunction("gauss1","gauss1",x,meanSgn,sigmaSgn);
-//                 fitFunction.fitTo(data,RooFit::Minos(useMinos));//
-//                 data.plotOn(plot);
-//                 fitFunction.plotOn(plot,LineColor(kRed));
-//                 chi2Fit = plot->chiSquare();
-//                 fitFunction.paramOn(plot,Layout(0.9,0.6,0.9),Format("NEU",AutoPrecision(1)));
-//                 plot->Draw();
-//                 fResults.mean1 = meanSgn.getVal();
-//                 fResults.mean2 = 0;
-//                 fResults.cMean2 = 0;
-//             }
-//             else{
-//                 if (fitModelOptions[iModel]==doubleGaussian){
-//                     RooRealVar meanBkg1("meanBkg1","meanBkg1",sgnMean,dtLowLims,dtUpLims);
-//                     RooGaussian gauss1("gauss1","gauss1",x,meanSgn,sigmaSgn);
-//                     RooRealVar sigmaBkg1("sigmaBkg1","sigmaBkg1",bkg1Sig,bkg1SigMin,bkg1SigMax);
-//                     RooGaussian gauss2("gauss2","gauss2",x,meanBkg1,sigmaBkg1);
-//                     RooRealVar cBkg1("cBkg1","cBkg1",c1,0.01,0.6);
-//                     RooAddPdf fitFunction("doubleGauss","doubleGauss",RooArgList(gauss2,gauss1),RooArgList(cBkg1));
-//                     fitFunction.fitTo(data,RooFit::PrintLevel(-1),RooFit::Minos(useMinos));//
-//                     data.plotOn(plot);
-//                     fitFunction.plotOn(plot,LineColor(kRed));
-//                     chi2Fit = plot->chiSquare();
-//                     fitFunction.plotOn(plot,Components("gauss1"),LineColor(kBlue),LineStyle(kDashed));
-//                     fitFunction.plotOn(plot,Components("gauss2"),LineColor(kGreen),LineStyle(kDashed));
-//                     fitFunction.paramOn(plot,Layout(0.9,0.6,0.9),Format("NEU",AutoPrecision(1)));
-//                     plot->Draw();
-//                     fResults.mean1 = meanSgn.getVal();
-//                     fResults.error1 = meanSgn.getError();
-//                     fResults.mean2 = meanBkg1.getVal();
-//                     fResults.error2 = meanBkg1.getError();
-//                     fResults.cMean2 = cBkg1.getVal();
-//                     fout << col << sep << (ph_bin-0.5)*dPPbin << sep << "doubleGaussian" << sep << chi2Fit << endl;
-//                 }
-//                 else
-//                 {
-//                     if (fitModelOptions[iModel]==tripleGaussian){
-//                         RooRealVar meanBkg1("meanBkg1","meanBkg1",sgnMean,sgnMean-0.5,sgnMean+0.5);
-//                         RooRealVar meanBkg2("meanBkg2","meanBkg2",sgnMean-deltaMean,dtLowLims,bkg2MeanMax);
-//                         RooGaussian gauss1("gauss1","gauss1",x,meanSgn,sigmaSgn);
-//                         RooRealVar sigmaBkg2("sigmaBkg2","sigmaBkg2",bkg2Sig,bkg2SigMin,bkg2SigMax);
-//                         RooGaussian gauss2("gauss2","gauss2",x,meanBkg2,sigmaBkg2);
-//                         RooRealVar sigmaBkg1("sigmaBkg1","sigmaBkg1",sgnSig,bkg1SigMin,bkg1SigMax);
-//                         RooGaussian gauss3("gauss3","gauss3",x,meanBkg1,sigmaBkg1);
-//                         RooRealVar cBkg1("cBkg1","cBkg1",c1,0.01,0.4);
-//                         RooRealVar cBkg2("cBkg2","cBkg2",c2,0.01,0.6);
-//                         RooAddPdf fitFunction("tripleGaussian","tripleGaussian",RooArgList(gauss2,gauss3,gauss1),RooArgList(cBkg2,cBkg1));
-//                         fitFunction.fitTo(data,RooFit::PrintLevel(-1),RooFit::Minos(useMinos));//
-//                         data.plotOn(plot);
-//                         fitFunction.plotOn(plot,LineColor(kRed));
-//                         chi2Fit = plot->chiSquare();
-//                         fitFunction.plotOn(plot,Components("gauss1"),LineColor(kBlue),LineStyle(kDashed));
-//                         fitFunction.plotOn(plot,Components("gauss2"),LineColor(kGreen),LineStyle(kDashed));
-//                         fitFunction.plotOn(plot,Components("gauss3"),LineColor(kYellow),LineStyle(kDashed));
-//                         fitFunction.paramOn(plot,Layout(0.9,0.6,0.9),Format("NEU",AutoPrecision(1)));
-//                         plot->Draw();
-//                         fResults.mean1 = meanSgn.getVal();
-//                         fResults.error1 = meanSgn.getError();
-//                         fResults.mean2 = meanBkg2.getVal();
-//                         fResults.error2 = meanBkg2.getError();
-//                         fResults.cMean2 = cBkg2.getVal();
-//                         fout << col << sep << (ph_bin-0.5)*dPPbin << sep << "tripleGaussian" << sep << chi2Fit << endl;
-//                     }
-//                     else
-//                     {  
-//                         cout << "Error! Incorrect chosen model.";
-//                         EXIT_FAILURE;
-//                     }
-//                 }
-//             }
-        
-//         // cout << endl << "chi2 = " << chi2Fit << endl;
-//         canvas->Print(resultSubFolder+"column_"+TString(ss.str())+"/"+TString(h->GetName())+".pdf");
-//         delete plot;    
-//         delete canvas; 
-
-//         if (chi2Fit < chi2Th) break;
-    
-//     }
-    
-//     fResults.ph_bin = ph_bin;
-//     return fResults;
-// }
-
 double GetMode(TH1 *h) {
     if (h->GetEntries() == 0.0) return 9999.0;
     int max_bin = h->GetMaximumBin();
     double max = h->GetBinContent(max_bin);
-    // if (max < minModeBinContentSelPP) return 9999.0;
     double maxBinCenter = h->GetBinCenter(max_bin);
     return maxBinCenter;
 }
@@ -511,14 +360,9 @@ parsForTripleGaussian GetParsForTripleGaussian(TH1 *h) {
         delete h0;
         return pars;
     };
-    double xmin = dtLowLims;//h->GetXaxis()->GetXmin();
-    double xmax = dtUpLims;//h->GetXaxis()->GetXmax();
+    double xmin = dtLowLims;
+    double xmax = dtUpLims;
     double xmid = (xmax + xmin)/2;
-    // double binCenterSeparator = (xmax+xmin)/2.0;
-    // double binWidth = h->GetXaxis()->GetBinWidth(0);
-    // int upBin = h0->GetXaxis;
-    // int lowBin = 1;
-    // int midBin = upBin/2;
     int max_bin1,max_bin2,max1,max2;
     int iter = 0;
     do {
@@ -533,9 +377,9 @@ parsForTripleGaussian GetParsForTripleGaussian(TH1 *h) {
         xmax = xmid;
         xmid = (xmax + xmin)/2;
 
-        cout << entries << " " << (max1-max2) << " " << max1 << " " << max2 << " " << h0->GetBinCenter(max_bin1) << " " << h0->GetBinCenter(max_bin2) << endl;
+        // cout << entries << " " << (max1-max2) << " " << max1 << " " << max2 << " " << h0->GetBinCenter(max_bin1) << " " << h0->GetBinCenter(max_bin2) << endl;
         iter++;
-    } while (iter < 2 && ((((max1-max2) < -0.5*max2)) || (max_bin1-max_bin2 < 30)));
+    } while (iter < 2 && ((((max1-max2) < -0.5*max2)) || (max_bin1-max_bin2 < 30))); //this logic need more evaluation, test on different kind of dataset
     
     double mode1 = h0->GetBinCenter(max_bin1);
     double mode2 = h0->GetBinCenter(max_bin2);
@@ -570,50 +414,7 @@ vector<vector<int>> GetPP(TFile *f){ //get PP
     return vecIdxPPAllCol;
 }
 
-// vector<int> GetNumberOfPP(TFile *f){ //get number of PP
-//     vector<int> vecIterator;
-//     for(int j=col;j<col+ncol;j++){
-//         int iterator=0;
-//         int ppLLims=-1;
-//         vector<double> vecMode;
-//         for (int i=10;i<125;i++) {
-//             // if (iterator == 8) break;
-//             TH1 *h = GetHistogram(f,j,i);
-//             int entries = h->GetEntries();
-//             double mode = GetMode(h);
-//             cout << entries << " " << GetMode(h) <<  endl;
-//             if ((entries > numbOfEntriesLims) && (ppLLims==-1) && mode<9000.0){
-//                 ppLLims = i+1;
-//             }
-//             if (ppLLims != -1){
-//                 if (entries < numbOfEntriesLims-(0.1*numbOfEntriesLims)) break;
-//                 else {
-//                     if (mode<9000.0) {
-//                         iterator++;
-//                         if (iterator<11) vecMode.push_back(mode);
-//                     }
-//                     else {
-//                         if (iterator<11){
-//                             iterator=0;
-//                             ppLLims=i+1;
-//                             vecMode.clear();
-//                         }
-//                         else break;
-//                     }
-//                 }
-//             }
-//         }
-//         iterator--;
-//         int maxModeIdx = max_element(vecMode.begin(),vecMode.end()) - vecMode.begin();
-//         ppLowLims[j-col] = ppLLims+maxModeIdx;
-//         ppUpLims[j-col] = ppLLims+iterator;
-//         iterator -= maxModeIdx;
-//         // iterator--;
-//         vecIterator.push_back(iterator);
-//     }
-//     return vecIterator;
-// }
-
+//determine bin center between two peaks
 double GetDipBinCenter(TH1 *h, double mode){
     int upperBin = 1+(mode - h->GetXaxis()->GetXmin())/h->GetXaxis()->GetBinWidth(0);
     const int nBinUsed = 15;
@@ -634,6 +435,7 @@ double GetDipBinCenter(TH1 *h, double mode){
     return h->GetBinCenter(upperBin-9);
 }
 
+//identify bad fits
 vector<int> IdentifyBadFit(Int_t n, Float_t* means,Float_t* errors){
     vector<int> badFitIdx;
     for (Int_t i=0;i<n;i++) {
@@ -644,6 +446,7 @@ vector<int> IdentifyBadFit(Int_t n, Float_t* means,Float_t* errors){
     return badFitIdx;
 }
 
+//Set new lower limit at discontinuity
 int GetGraphLowerLimsIdx(const int n, Float_t* means, Float_t* pps){
     Float_t grads[n-1];
     vector<int> badGrads;
@@ -651,36 +454,9 @@ int GetGraphLowerLimsIdx(const int n, Float_t* means, Float_t* pps){
     if (n<10) return 0;
     for (int i=0;i<n-1;i++) {
         grads[i] = (means[i+1]-means[i])/(pps[i+1]-pps[i]);
-        cout << i << " " << grads[i] << endl;
+        // cout << i << " " << grads[i] << endl;
     }
-    for (int i=0;i<10;i++) if ((grads[i]-grads[i+1])>0.003 && (grads[i+1] < -0.0001) && (grads[i]>-0.002)) badGrads.push_back(i+1);
+    for (int i=0;i<10;i++) if ((grads[i]-grads[i+1])>0.003 && (grads[i+1] < -0.0001) && (grads[i]>-0.006)) badGrads.push_back(i+1);
     if (badGrads.size() != 0) return badGrads[badGrads.size()-1];
     else return 0;
 }
-
-// void WriteTWFitResults(ofstream &fouttw, TGraph *gr, Int_t col){
-//     TString separator = ",";
-
-//     Float_t xLowLims = gr->GetXaxis()->GetXmin();
-//     Float_t xUpLims = gr->GetXaxis()->GetXmax();
-
-//     TF1 *twFitFunction = new TF1("twFitFunction","[0] + [1]*((1/([4]*x+[3]))^[2])",xLowLims,xUpLims);
-//     twFitFunction->SetParameter(0,-0.0661505);
-//     twFitFunction->SetParameter(1,5.55105e+08);
-//     twFitFunction->SetParameter(2,42.7598);
-//     twFitFunction->SetParameter(3,1.43117);
-//     twFitFunction->SetParameter(4,0.000330912);
-
-//     TFitResultPtr TWFitResultPtr = gr->Fit("twFitFunction","MS");
-//     Double_t p0 = TWFitResultPtr->Value(0);
-//     Double_t p1 = TWFitResultPtr->Value(1);
-//     Double_t p2 = TWFitResultPtr->Value(2);
-//     Double_t p3 = TWFitResultPtr->Value(3);
-//     Double_t p4 = TWFitResultPtr->Value(4);
-//     Double_t chi2tw = TWFitResultPtr->Chi2();
-//     Int_t fitStatus = TWFitResultPtr;
-
-//     fouttw << col << separator << p0 << separator << p1 << separator << p2 << separator << p3 << separator << chi2tw << separator << fitStatus << endl;
-//     delete twFitFunction;
-// }
-//  separator << p4
