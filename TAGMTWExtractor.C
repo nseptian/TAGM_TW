@@ -75,7 +75,7 @@ const bool useMinos = kTRUE;
 const double chi2DiffThres = 0.6;
 const double maxModeBinContentTrpGauss = 1000;
 
-int TAGMTWExtractor(TString runNumber="72369-29June2021") {
+int TAGMTWExtractor(TString runNumber="72369") {
 
     TString rootFile=rootFileFolder+rootFilePrefix+runNumber+".root";
 
