@@ -23,15 +23,16 @@ TString rootFilePrefix = "hd_root-r";
 // TString rootFileFolder = "/d/grid17/sdobbs/2019-11-mon/mon_ver17/"; //07XXX
 
 // TString rootFileFolder = "";
-// TString rootFilePrefix = "hd_root-r";
+// TString rootFilePrefix = "hd_root_";
 
 TString resultFolder = "print_corrected/";
 
-void print_corrected(TString runNumber = "30739_callibrated") {
+void print_corrected(TString runNumber = "72369-29June2021") {
 
    TString inputFile=rootFileFolder+rootFilePrefix+runNumber+".root";
    
    TCanvas *c1 = new TCanvas();
+   c1->Divide(3,3);
 
    f = new TFile(inputFile);
    std::cout << "file: " << inputFile << std::endl;
@@ -44,18 +45,26 @@ void print_corrected(TString runNumber = "30739_callibrated") {
    makeDir += resultSubFolder;
    system(makeDir);
 
+   Int_t idx = 0;
    for (Int_t i = 0; i < 102; ++i)
    {
-      h_tw[i] = (TH2I*)f->Get(Form("TAGM_TW/tdc-rf/h_dt_vs_pp_tdc_%i",i+1));
+      c1->cd(idx+1);
+      gPad->SetLogz();
+      h_tw[i] = (TH2I*)f->Get(Form("TAGM_TW/t-rf/h_dt_vs_pp_%i",i+1));
       h_tw[i]->SetTitle(Form("Timewalk Col %i",i+1));
-      c1->SetLogz(1);
       h_tw[i]->Draw("colz");
-      TString pdfName;
-      pdfName += resultSubFolder;
-      pdfName += "gr_pp_vs_dt_col_";
-      pdfName += i+1;
-      pdfName += ".pdf";
-
-      c1->Print(pdfName);
+      idx++;
+      // cout << i+1 << " " << idx << endl;
+      if (idx == 9){
+         TString pdfName;
+         pdfName += resultSubFolder;
+         pdfName += "h_dt_vs_pp_";
+         pdfName += i-7;
+         pdfName += "_";
+         pdfName += i+1;
+         pdfName += ".pdf";
+         c1->Print(pdfName);
+         idx = 0;
+      }
    }
 }

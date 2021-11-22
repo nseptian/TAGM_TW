@@ -27,7 +27,7 @@ TString rootFilePrefix = "hd_root-r";
 
 TString resultFolder = "print_uncorrected/";
 
-void print_uncorrected(TString runNumber = "30739_callibrated") {
+void print_uncorrected(TString runNumber = "72369-29June2021") {
 
    TString inputFile=rootFileFolder+rootFilePrefix+runNumber+".root";
    
@@ -46,13 +46,14 @@ void print_uncorrected(TString runNumber = "30739_callibrated") {
 
    for (Int_t i = 0; i < 102; ++i)
    {
-      h_tw[i] = (TH2I*)f->Get(Form("TAGM_TW/t-rf/h_dt_vs_pp_%i",i+1));
+      h_tw[i] = (TH2I*)f->Get(Form("TAGM_TW/tdc-rf/h_dt_vs_pp_tdc_%i",i+1));
+      h_tw[i]->GetYaxis()->SetRangeUser(-10,15);
       h_tw[i]->SetTitle(Form("Timewalk Col %i",i+1));
       c1->SetLogz(1);
       h_tw[i]->Draw("colz");
       TString pdfName;
       pdfName += resultSubFolder;
-      pdfName += "gr_pp_vs_dt_col_";
+      pdfName += "h_dt_vs_pp_tdc_";
       pdfName += i+1;
       pdfName += ".pdf";
 
