@@ -55,7 +55,7 @@ const double bkg2Sig = 0.2;
 const double c1 = 0.1;
 const double c2 = 0.4;
 
-TString resultFolder = "resultTAGMTWExtractor/";
+TString resultFolder = "resultTAGMTWExtractorTest/";
 
 // local sample
 TString rootFileFolder = "root/";
@@ -74,6 +74,7 @@ TString rootFileOutputPrefix = "TW_";
 const bool useMinos = kTRUE;
 const double chi2DiffThres = 0.6;
 const double maxModeBinContentTrpGauss = 1000;
+const bool printFits = kFALSE;
 
 int TAGMTWExtractor(TString runNumber="72369") {
 
@@ -100,7 +101,8 @@ int TAGMTWExtractor(TString runNumber="72369") {
         const int n = SelectedPP[j-col].size(); //number of pulse peak to fit on each column
         // cout << "n = " << n << endl;
         stringstream ss; ss << j;
-        ofstream fout; fout.open(resultSubFolder+"chi2Fit_col_"+TString(ss.str())+".csv");
+        ofstream fout;
+        if (printFits) fout.open(resultSubFolder+"chi2Fit_col_"+TString(ss.str())+".csv");
         if (n<=0) {
             //dummy graph for empty pulse peak
             Double_t xempty[6] = {200,300,400,500,600,700};
@@ -207,18 +209,19 @@ int TAGMTWExtractor(TString runNumber="72369") {
         namegrTitle+=j;
         g[j-col]->SetTitle(namegrTitle);
         g[j-col]->Draw("ap");
-        TString pdfName;
-        pdfName = resultSubFolder;
-        pdfName += "gr_pp_vs_dt_fitted_";
-        TString grName = "gr_pp_vs_dt_fitted_";
-        pdfName += j;
-        grName += j;
-        g[j-col]->Write(grName);
-        pdfName += ".pdf";
-        c0->Print(pdfName);
-        fout.close();
+        if (printFits) {
+            TString pdfName;
+            pdfName = resultSubFolder;
+            pdfName += "gr_pp_vs_dt_fitted_";
+            TString grName = "gr_pp_vs_dt_fitted_";
+            pdfName += j;
+            grName += j;
+            g[j-col]->Write(grName);
+            pdfName += ".pdf";
+            c0->Print(pdfName);
+            fout.close();
+        }
     }
-    // fouttw.close();
     return 0;
 }
 
@@ -246,12 +249,16 @@ gaussianFitResults DoGaussianFit(ofstream &fout, TH1 *h, int col, int ph_bin,TSt
     RooRealVar x("TDC time difference","TDC time difference [ns]",dtLowLims,dtUpLims);
     RooDataHist data("data","data",RooArgList(x),h);
     
-    stringstream ss; ss << col;
-    TString makeDirFit = "mkdir -p ";
-    makeDirFit += resultSubFolder;
-    makeDirFit += "column_";
-    makeDirFit += TString(ss.str());
-    system(makeDirFit);
+    stringstream ss; 
+    
+    if (printFits){
+        ss << col;
+        TString makeDirFit = "mkdir -p ";
+        makeDirFit += resultSubFolder;
+        makeDirFit += "column_";
+        makeDirFit += TString(ss.str());
+        system(makeDirFit);
+    }
 
     gaussianFitResults fResults;
 
@@ -284,7 +291,7 @@ gaussianFitResults DoGaussianFit(ofstream &fout, TH1 *h, int col, int ph_bin,TSt
     fResults.mean2 = meanBkg1Double.getVal();
     fResults.error2 = meanBkg1Double.getError();
     fResults.cMean2 = cBkg1Double.getVal();
-    fout << col << sep << (ph_bin-0.5)*dPPbin << sep << "doubleGaussian" << sep << chi2FitDouble << endl;
+    if (printFits) fout << col << sep << (ph_bin-0.5)*dPPbin << sep << "doubleGaussian" << sep << chi2FitDouble << endl;
 
     //triple gaussian fit
     //determine initial parameters of tripe gaussian fitting
@@ -312,7 +319,7 @@ gaussianFitResults DoGaussianFit(ofstream &fout, TH1 *h, int col, int ph_bin,TSt
     data.plotOn(plotTriple);
     fitFunctionTriple.plotOn(plotTriple,LineColor(kRed));
     double chi2FitTriple = plotTriple->chiSquare();
-    fout << col << sep << (ph_bin-0.5)*dPPbin << sep << "tripleGaussian" << sep << chi2FitTriple << endl;
+    if (printFits) fout << col << sep << (ph_bin-0.5)*dPPbin << sep << "tripleGaussian" << sep << chi2FitTriple << endl;
     double diffChi2Fit = abs(chi2FitDouble-chi2FitTriple);//(diffChi2Fit > chi2DiffThres) //|| ((cBkg1Double.getVal() <= 0.1) && (diffChi2Fit > 2.0)
     double diffMeanTriple = abs(meanSgnTriple.getVal()-meanBkg2Triple.getVal());
     double modeBinContent = h->GetBinContent(h->GetBin(meanSgnTriple.getVal()));
@@ -331,7 +338,7 @@ gaussianFitResults DoGaussianFit(ofstream &fout, TH1 *h, int col, int ph_bin,TSt
         fResults.cMean2 = cBkg2Triple.getVal();
     }
     // cout << endl << "chi2 = " << chi2Fit << endl;
-    canvas->Print(resultSubFolder+"column_"+TString(ss.str())+"/"+TString(h->GetName())+".pdf");
+    if (printFits) canvas->Print(resultSubFolder+"column_"+TString(ss.str())+"/"+TString(h->GetName())+".pdf");
 
     delete plotDouble;
     delete plotTriple;    
